@@ -1,0 +1,268 @@
+import { promises as fs } from 'fs';
+import path from 'path';
+import { NextRequest, NextResponse } from 'next/server';
+
+type ConfigVariant = 'starter' | 'pro';
+
+const CONFIG_PATHS: Record<ConfigVariant, string> = {
+  starter: path.join(process.cwd(), 'data', 'site-config.json'),
+  pro: path.join(process.cwd(), 'data', 'site-config-pro.json'),
+};
+
+const DEFAULT_CONFIG = {
+  layoutLandscape: {
+    personOffsetY: 190,
+    signupOffsetY: -214,
+    miniBadgesOffsetY: 236,
+    miniBadgeFontSize: 9,
+    batchCardFontScale: 2,
+    moduleBgOffsetX: 0,
+    reserveTimerSize: 26,
+    lockBlurPx: 10,
+    portraitStageOffsetY: 0,
+    portraitStageGap: 48,
+    portraitStageHeight: 620,
+  },
+  layoutPortraitDesktop: {
+    personOffsetY: 140,
+    signupOffsetY: -120,
+    miniBadgesOffsetY: 280,
+    miniBadgeFontSize: 9,
+    batchCardFontScale: 2,
+    moduleBgOffsetX: 0,
+    reserveTimerSize: 24,
+    lockBlurPx: 10,
+    portraitStageOffsetY: 0,
+    portraitStageGap: 24,
+    portraitStageHeight: 580,
+  },
+  layoutPortraitMobile: {
+    personOffsetY: 132,
+    signupOffsetY: -132,
+    miniBadgesOffsetY: 292,
+    miniBadgeFontSize: 9,
+    batchCardFontScale: 2,
+    moduleBgOffsetX: 0,
+    reserveTimerSize: 24,
+    lockBlurPx: 10,
+    portraitStageOffsetY: 0,
+    portraitStageGap: 24,
+    portraitStageHeight: 580,
+  },
+  personOffsetY: 190,
+  signupOffsetY: -214,
+  miniBadgesOffsetY: 236,
+  miniBadgeFontSize: 9,
+  batchCardFontScale: 2,
+  moduleBgOffsetX: 0,
+  reserveTimerSize: 26,
+  lockBlurPx: 10,
+  portraitStageOffsetY: 0,
+  portraitStageGap: 48,
+  portraitStageHeight: 620,
+  texts: {
+    heroSysLabel: 'SUBJECT ONBOARDING',
+    courseTag: '7 天陪跑課程',
+    heroTitle1: '想加入幣圈',
+    heroTitle2: '不知道怎麼開始？',
+    heroCopy: '從 0 開始教你：平台操作、專有名詞、獲利方式，一次帶你跑完。',
+    pillSecurity: 'SECURITY',
+    pillTerms: 'TERMS',
+    pillEntryExit: 'ENTRY / EXIT',
+    pillRisk: 'RISK',
+    bridgeBio: 'BIO',
+    bridgeCta: 'CTA',
+    cta: '立即報名新手課程',
+    lockOn: 'LOCK: ON · CONF: 98.7%',
+    filterStatus: 'FILTER STATUS: ACTIVE',
+    idMatch: 'ID MATCH: VERIFIED',
+    subjectStatus: 'SUBJECT / STATUS',
+    authStatus: 'LOCK ON / AUTH VERIFIED',
+    readyIn: 'READY IN 00:06',
+    step1SysLabel: 'STEP 01',
+    step1Title: '開始你的專屬陪跑課',
+    step1Desc: '',
+    step1Locked: 'STEP 01 LOCKED · 向下滑動或點擊解鎖',
+    flipCourse: '新手陪跑課程',
+    flipBatch: '第一梯',
+    timelineLabel: 'WINDOW: 7D',
+    timelineBadge: 'FIRST BATCH',
+    quickForm: 'QUICK FORM',
+    safeEntry: 'SAFE ENTRY',
+    eta30: 'ETA 30 SEC',
+    formLineLabel: 'line名稱 *',
+    formLinePlaceholder: '請輸入 line名稱',
+    formLimeLabel: '您的LIME',
+    formLimePlaceholder: '請輸入您的LIME',
+    formPhoneLabel: '電話',
+    formPhonePlaceholder: '請輸入電話',
+    formUidLabel: 'PENHU聯盟會員編號 *',
+    formUidPlaceholder: '請輸入 PENHU聯盟會員編號',
+    formKnowLabel: '你對於加密貨幣的了解程度 *',
+    formBudgetLabel: '你願意在加密貨幣投入多少新台幣? *',
+    formCourseLabel: '你想報名的課程是? *',
+    formChoose: '請選擇',
+    know1: '我是小白 什麼都不懂',
+    know2: '有稍微了解過一些相關知識',
+    know3: '我是幣圈人 但平常沒什麼在交易',
+    know4: '我是幣圈人 經常在做自主交易',
+    budget1: '3萬以內',
+    budget2: '3-10萬',
+    budget3: '10萬以上',
+    batchCourse: '第1梯新手陪跑課程（03 / 09 - 03 / 15）',
+    formNote: '新手陪跑課程畢業後即可免費參加進階課程',
+    formSubmit: '送出報名',
+    step2SysLabel: 'STEP 02',
+    step2Title: '機構級訓練解鎖',
+    step2UnlockCopy: '價值數十萬的頂級交易員內部培訓課程，現在直接為你解鎖。',
+    step2UnlockBtnIdle: 'CLICK TO UNLOCK',
+    step2UnlockBtnBusy: 'AUTHENTICATING...',
+    step2Detail:
+      '捨棄散戶思維，不再追高殺低。你將獲得機構級獲利系統，有數據依據、有風險模型、有進出場邏輯，交易不再是情緒對抗，而是有框架、有勝率的資金博弈。',
+    step3SysLabel: 'STEP 03',
+    step3Title: '進階模組地圖',
+    step3Desc: '先揭露，再選擇你要進入的模組。',
+    step3Tag1: 'SMART TRACK',
+    step3Tag2: 'ALPHA LAB',
+    step3Tag3: 'RISK MAP',
+    step3Reveal: '點擊揭露系統內容',
+    step3Status: '即將開放報名',
+    step3DescTitle: '模組說明',
+    step3Cta: '立即報名，解鎖免費進階實戰課程',
+    footerText: '© 2026 Penhu Trading Alliance. All rights reserved.',
+  },
+  tracksData: [
+    {
+      title: 'AI 聰明錢追蹤',
+      description:
+        '別再盲目盯盤。我們教你利用 AI 深度分析工具，自動化篩選異常大額交易，精準洞悉 Smart Money 的資金流向，跟隨機構與巨鯨腳步佈局。',
+    },
+    {
+      title: '數據分析',
+      description:
+        '從成交量、持倉量、資金費率、流動性結構中看懂多空轉換。建立數據決策框架，讓每一次進場都有依據，而不是情緒。',
+    },
+    {
+      title: 'Web3 金狗團',
+      description:
+        '帶你從零學會 Web3 金狗篩選技能。第一時間判讀資金流向，埋伏早期潛力標的，用小本金做策略型放大。',
+    },
+    {
+      title: 'SMC',
+      description:
+        '市場不是隨機波動，而是主力與散戶的結構博弈。從流動性獵取、假突破誘單到趨勢延續，建立高階看盤視角。',
+    },
+    {
+      title: '嚕空投',
+      description:
+        '用最低風險參與鏈上互動，理解空投規則與評分邏輯。每一步都有方向，兼顧成本、時間與中獎機率。',
+    },
+    {
+      title: '訂單流',
+      description:
+        '學會訂單流後，你不再只是猜 K 線方向，而是讀懂推動價格的資金力量，提升進場精準度與盈虧比。',
+    },
+  ],
+};
+
+const DEFAULT_CONFIG_PRO = (() => {
+  const base = JSON.parse(JSON.stringify(DEFAULT_CONFIG)) as typeof DEFAULT_CONFIG;
+  base.texts = {
+    ...base.texts,
+    courseTag: '7天高階實戰班',
+    heroTitle1: '進入機構級交易',
+    heroTitle2: '打造你的實戰體系',
+    heroCopy: '聚焦高勝率流程：市場結構、資金行為、風險模型，一次完成實戰升級。',
+    cta: '立即報名實戰班',
+    step1Title: '開始你的高階實戰班',
+    formNote: '實戰班結業可進入內部策略社群與進階盤中工作坊',
+    step2UnlockCopy: '價值百萬的頂級交易員內部培訓課程，現在直接為你解鎖。',
+    step3Title: '機構級實戰地圖',
+    step3Desc: '以策略框架落地到交易執行，從訊號到倉位管理，全面提升實戰穩定度。',
+    step3Status: '實戰模組開放中',
+    step3Cta: '實戰班結業即可解鎖',
+  };
+  base.tracksData = [
+    {
+      title: '機構聰明錢雷達',
+      description: '追蹤鏈上巨量異動、交易所淨流入與大戶持倉變化，提早掌握主力布局節奏。',
+    },
+    {
+      title: '量化決策儀表',
+      description: '以多因子框架建立交易決策，將風險、勝率與盈虧比變成可驗證、可迭代的流程。',
+    },
+    {
+      title: 'Web3 前沿戰略',
+      description: '聚焦高信噪比敘事與早期訊號，建立從題材到資金承接的完整進場判讀系統。',
+    },
+    {
+      title: 'SMC 實戰推演',
+      description: '用流動性結構與訂單區塊定位關鍵反轉，提升進出場精準度並降低追價風險。',
+    },
+    {
+      title: '空投策略優化',
+      description: '不只做任務，建立 ROI 導向的空投打法，平衡時間成本、資金成本與命中率。',
+    },
+    {
+      title: '訂單流強化',
+      description: '從委託簿深度與成交節奏識別真實動能，讓每筆交易都建立在資金行為上。',
+    },
+  ];
+  return base;
+})();
+
+const DEFAULT_CONFIG_BY_VARIANT: Record<ConfigVariant, typeof DEFAULT_CONFIG> = {
+  starter: DEFAULT_CONFIG,
+  pro: DEFAULT_CONFIG_PRO,
+};
+
+function resolveVariant(request?: NextRequest): ConfigVariant {
+  if (!request) return 'starter';
+  return request.nextUrl.searchParams.get('variant') === 'pro' ? 'pro' : 'starter';
+}
+
+async function ensureConfig(variant: ConfigVariant) {
+  const configPath = CONFIG_PATHS[variant];
+  const defaultConfig = DEFAULT_CONFIG_BY_VARIANT[variant];
+  try {
+    await fs.access(configPath);
+  } catch {
+    await fs.mkdir(path.dirname(configPath), { recursive: true });
+    await fs.writeFile(configPath, JSON.stringify(defaultConfig, null, 2), 'utf8');
+  }
+}
+
+export async function GET(request: NextRequest) {
+  const variant = resolveVariant(request);
+  const configPath = CONFIG_PATHS[variant];
+  const defaultConfig = DEFAULT_CONFIG_BY_VARIANT[variant];
+  try {
+    await ensureConfig(variant);
+    const raw = await fs.readFile(configPath, 'utf8');
+    return NextResponse.json(JSON.parse(raw));
+  } catch {
+    return NextResponse.json(defaultConfig);
+  }
+}
+
+export async function PUT(req: Request) {
+  try {
+    const request = req as NextRequest;
+    const variant = resolveVariant(request);
+    const configPath = CONFIG_PATHS[variant];
+    const isProduction = process.env.NODE_ENV === 'production';
+    const adminKey = (process.env.ADMIN_CONFIG_KEY || '').trim();
+    const reqKey = request.headers.get('x-admin-key')?.trim() || '';
+    if (isProduction && (!adminKey || reqKey !== adminKey)) {
+      return NextResponse.json({ ok: false }, { status: 403 });
+    }
+
+    const body = await req.json();
+    await fs.mkdir(path.dirname(configPath), { recursive: true });
+    await fs.writeFile(configPath, JSON.stringify(body, null, 2), 'utf8');
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    console.error('save site-config failed', error);
+    return NextResponse.json({ ok: false }, { status: 500 });
+  }
+}

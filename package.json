@@ -4,14 +4,26 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:up": "bash scripts/dev-server.sh up",
+    "dev:warm": "bash scripts/dev-server.sh warm",
+    "dev:doctor": "bash scripts/dev-server.sh doctor",
+    "dev:start": "bash scripts/dev-server.sh start",
+    "dev:stop": "bash scripts/dev-server.sh stop",
+    "dev:down": "bash scripts/dev-server.sh stop",
+    "dev:restart": "bash scripts/dev-server.sh restart",
+    "dev:status": "bash scripts/dev-server.sh status",
+    "dev:logs": "bash scripts/dev-server.sh logs",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"
   },
   "dependencies": {
+    "googleapis": "^171.4.0",
     "next": "16.1.6",
+    "playwright": "^1.58.2",
     "react": "19.2.3",
-    "react-dom": "19.2.3"
+    "react-dom": "19.2.3",
+    "sharp": "^0.34.5"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

@@ -1,0 +1,20 @@
+services:
+  penhu7days:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: penhu7days
+    ports:
+      - "3042:3000"
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/.next
+      - /Users/yaja/projects/gcp-current.json:/app/gcp-current.json:ro
+    env_file:
+      - .env.local
+    environment:
+      NODE_ENV: development
+      GOOGLE_APPLICATION_CREDENTIALS: /app/gcp-current.json
+    stdin_open: true
+    tty: true
