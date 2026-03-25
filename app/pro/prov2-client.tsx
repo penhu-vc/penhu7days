@@ -413,6 +413,14 @@ export default function ProV2LandingPage() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
+    if (!selectedBatch) {
+      setSubmitState('error');
+      setSubmitMessage('請先選擇梯次再送出申請。');
+      const batchSection = document.querySelector('[class*="batchSection"], [class*="batchRow"], [class*="batchCard"]');
+      if (batchSection) batchSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+
     if (interestAreas.length === 0) {
       setSubmitState('error');
       setSubmitMessage('請至少勾選一項想多了解的主題。');
@@ -756,7 +764,7 @@ export default function ProV2LandingPage() {
               </div>
             </div>
 
-            <form className={styles.formGrid} onSubmit={handleSubmit}>
+            <form className={styles.formGrid} onSubmit={handleSubmit} noValidate>
               <label>
                 <span>LINE名稱 *</span>
                 <input value={lineName} onChange={(event) => setLineName(event.target.value)} required />
