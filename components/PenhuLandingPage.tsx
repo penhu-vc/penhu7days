@@ -347,6 +347,7 @@ export default function PenhuLandingPage({ variant = 'starter' }: { variant?: La
   const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null);
   const [knowledgeLevel, setKnowledgeLevel] = useState<number | null>(null);
   const [knowledgeRequiredBlink, setKnowledgeRequiredBlink] = useState(false);
+  const [batchRequiredBlink, setBatchRequiredBlink] = useState(false);
   const [budgetAmount, setBudgetAmount] = useState(1010000);
   const [budgetTouched, setBudgetTouched] = useState(false);
   const [budgetRequiredBlink, setBudgetRequiredBlink] = useState(false);
@@ -612,7 +613,15 @@ export default function PenhuLandingPage({ variant = 'starter' }: { variant?: La
 
   const handleSignupSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!selectedBatchId || isSubmittingSignup) return;
+    if (isSubmittingSignup) return;
+    if (!selectedBatchId) {
+      setBatchRequiredBlink(false);
+      requestAnimationFrame(() => setBatchRequiredBlink(true));
+      window.setTimeout(() => setBatchRequiredBlink(false), 1800);
+      const batchRail = document.querySelector('.batch-rail');
+      if (batchRail) batchRail.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
     const formEl = e.currentTarget;
 
     let hasInvalid = false;
@@ -1271,6 +1280,9 @@ export default function PenhuLandingPage({ variant = 'starter' }: { variant?: La
           <p className="sys-label">{texts.step1SysLabel}</p>
           <h2>{texts.step1Title}</h2>
           <p>選擇下面梯次 為你預留名額</p>
+          {batchRequiredBlink && (
+            <p style={{ color: '#ff4d4d', fontWeight: 600, marginTop: 4 }}>⚠️ 請先選擇梯次再送出</p>
+          )}
           <div className="batch-rail" data-fx>
             <div className="batch-rail-list" ref={railListRef}>
               {signupBatches
