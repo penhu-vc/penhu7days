@@ -584,6 +584,85 @@ function mapFailureReasonText(code: CaptchaFailureCode): string {
   return 'captcha 無效或驗證失敗';
 }
 
+async function appendFailureToSpreadsheet(params: {
+  code: string;
+  reason: string;
+  data: Partial<SignupPayload>;
+  ip: string;
+  userAgent: string;
+  extra?: string;
+}) {
+  const spreadsheetId = (process.env.GOOGLE_SPREADSHEET_ID || '').trim();
+  if (!spreadsheetId) return;
+
+  try {
+    const keyFile = (process.env.GOOGLE_APPLICATION_CREDENTIALS || '').trim();
+    const auth = new google.auth.GoogleAuth(
+      keyFile ? { keyFile, scopes: [SHEETS_SCOPE] } : { scopes: [SHEETS_SCOPE] }
+    );
+    const sheets = google.sheets({ version: 'v4', auth });
+    const sheetName = '送出失敗記錄';
+    const escapedSheetName = sheetName.replace(/'/g, "''");
+    const headerRange = `'${escapedSheetName}'!A1:L1`;
+    const appendRange = `'${escapedSheetName}'!A:L`;
+    const expectedHeaders = [
+      '提交時間', '失敗代碼', '失敗原因', '補充說明',
+      'LINE 名稱', 'LINE ID', 'Email', '電話', 'OKX UID',
+      'IP', 'User-Agent', '梯次',
+    ] as const;
+
+    const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId });
+    const hasSheet = (spreadsheet.data.sheets || []).some(
+      (s) => s.properties?.title === sheetName
+    );
+    if (!hasSheet) {
+      await sheets.spreadsheets.batchUpdate({
+        spreadsheetId,
+        requestBody: { requests: [{ addSheet: { properties: { title: sheetName } } }] },
+      });
+    }
+
+    const headerRes = await sheets.spreadsheets.values.get({ spreadsheetId, range: headerRange });
+    const currentHeader = headerRes.data.values?.[0] ?? [];
+    const shouldUpdate =
+      currentHeader.length < expectedHeaders.length ||
+      expectedHeaders.some((item, i) => String(currentHeader[i] ?? '') !== item);
+    if (shouldUpdate) {
+      await sheets.spreadsheets.values.update({
+        spreadsheetId,
+        range: headerRange,
+        valueInputOption: 'RAW',
+        requestBody: { values: [Array.from(expectedHeaders)] },
+      });
+    }
+
+    await sheets.spreadsheets.values.append({
+      spreadsheetId,
+      range: appendRange,
+      valueInputOption: 'RAW',
+      insertDataOption: 'INSERT_ROWS',
+      requestBody: {
+        values: [[
+          new Date().toISOString(),
+          params.code,
+          params.reason,
+          params.extra ?? '',
+          params.data.lineName ?? '',
+          params.data.lineId ?? '',
+          params.data.email ?? '',
+          params.data.phone ?? '',
+          params.data.okxUid ?? '',
+          params.ip,
+          params.userAgent,
+          params.data.batchId ? `${getBatchLabel(params.data.batchId)} (${params.data.batchId})` : '',
+        ]],
+      },
+    });
+  } catch (error) {
+    console.error('append failure log failed', error);
+  }
+}
+
 async function appendCaptchaFailureToSpreadsheet(params: {
   code: CaptchaFailureCode;
   data: SignupPayload;
@@ -703,17 +782,20 @@ async function appendCaptchaFailureToSpreadsheet(params: {
 }
 
 export async function POST(req: NextRequest) {
+  const ip = getClientIp(req);
+  const userAgent = req.headers.get('user-agent')?.trim() || 'unknown';
+
   if (!isSameOrigin(req)) {
+    appendFailureToSpreadsheet({ code: 'FORBIDDEN_ORIGIN', reason: '請求來源不符合，疑似跨域攻擊', data: {}, ip, userAgent }).catch(() => {});
     return NextResponse.json({ ok: false, code: 'FORBIDDEN_ORIGIN' }, { status: 403 });
   }
 
   const contentType = (req.headers.get('content-type') || '').toLowerCase();
   if (!contentType.includes('application/json')) {
+    appendFailureToSpreadsheet({ code: 'BAD_CONTENT_TYPE', reason: '請求格式錯誤，非 JSON', data: {}, ip, userAgent, extra: contentType }).catch(() => {});
     return NextResponse.json({ ok: false, code: 'BAD_CONTENT_TYPE' }, { status: 415 });
   }
 
-  const ip = getClientIp(req);
-  const userAgent = req.headers.get('user-agent')?.trim() || 'unknown';
   const acceptLanguage = req.headers.get('accept-language')?.trim() || 'unknown';
   const fingerprint = `${ip}::${userAgent.slice(0, 120)}::${acceptLanguage.slice(0, 80)}`;
   const now = Date.now();
@@ -731,11 +813,28 @@ export async function POST(req: NextRequest) {
       : Boolean((process.env.CAPTCHA_SECRET || '').trim());
 
   if (count > HARD_LIMIT_PER_WINDOW || fingerprintCount > HARD_LIMIT_PER_FINGERPRINT || globalCount > HARD_LIMIT_GLOBAL) {
+    appendFailureToSpreadsheet({
+      code: 'RATE_LIMITED',
+      reason: `請求頻率超過限制`,
+      data: {},
+      ip,
+      userAgent,
+      extra: `IP次數:${count} 指紋次數:${fingerprintCount} 全域次數:${globalCount}`,
+    }).catch(() => {});
     return NextResponse.json({ ok: false, code: 'RATE_LIMITED' }, { status: 429 });
   }
 
-  const validation = validatePayload(await req.json().catch(() => null));
+  const rawBody = await req.json().catch(() => null);
+  const validation = validatePayload(rawBody);
   if (!validation.ok) {
+    const partial = (rawBody && typeof rawBody === 'object') ? rawBody as Partial<SignupPayload> : {};
+    appendFailureToSpreadsheet({
+      code: 'BAD_REQUEST',
+      reason: `欄位驗證失敗：${validation.message}`,
+      data: partial,
+      ip,
+      userAgent,
+    }).catch(() => {});
     return NextResponse.json({ ok: false, code: 'BAD_REQUEST', reason: validation.message }, { status: 400 });
   }
   const courseType = inferCourseType(req, validation.data);
@@ -819,8 +918,22 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     if (error instanceof StorageError) {
       const status = error.code === 'STORAGE_NOT_CONFIGURED' ? 503 : 500;
+      appendFailureToSpreadsheet({
+        code: error.code,
+        reason: error.code === 'STORAGE_NOT_CONFIGURED' ? 'Google Sheets 未設定，資料未寫入' : `Google Sheets 寫入失敗：${error.message}`,
+        data: validation.data,
+        ip,
+        userAgent,
+      }).catch(() => {});
       return NextResponse.json({ ok: false, code: error.code }, { status });
     }
+    appendFailureToSpreadsheet({
+      code: 'STORAGE_WRITE_FAILED',
+      reason: `Google Sheets 寫入例外：${String(error)}`,
+      data: validation.data,
+      ip,
+      userAgent,
+    }).catch(() => {});
     return NextResponse.json({ ok: false, code: 'STORAGE_WRITE_FAILED' }, { status: 500 });
   }
 
