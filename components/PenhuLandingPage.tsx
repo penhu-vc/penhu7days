@@ -360,8 +360,13 @@ export default function PenhuLandingPage({ variant = 'starter' }: { variant?: La
   const [signupSubmitError, setSignupSubmitError] = useState('');
   const [emailInput, setEmailInput] = useState('');
   const [prefill, setPrefill] = useState<Record<string, string>>({});
+  const [oauthUser, setOauthUser] = useState<{ name: string; email: string; shortCode: string } | null>(null);
+  const [oauthError, setOauthError] = useState(false);
+
   useEffect(() => {
+    // URL params prefill（外部網站跳轉）
     const p = new URLSearchParams(window.location.search);
+    if (p.get('oauth_error')) setOauthError(true);
     const vals: Record<string, string> = {
       line_name: p.get('lineName') ?? '',
       line_id: p.get('lineId') ?? '',
@@ -371,6 +376,21 @@ export default function PenhuLandingPage({ variant = 'starter' }: { variant?: La
       ref: p.get('ref') ?? '',
     };
     if (Object.values(vals).some(Boolean)) setPrefill(vals);
+
+    // OAuth session prefill
+    fetch('/api/oauth/me')
+      .then((r) => r.json())
+      .then(({ user }) => {
+        if (!user) return;
+        setOauthUser(user);
+        setPrefill((prev) => ({
+          ...prev,
+          line_name: prev.line_name || user.name || '',
+          email: prev.email || user.email || '',
+          okx_uid: prev.okx_uid || user.shortCode || '',
+        }));
+      })
+      .catch(() => {});
   }, []);
   const [recaptchaReady, setRecaptchaReady] = useState(false);
   const [reserveDeadlineMs, setReserveDeadlineMs] = useState<number | null>(null);
@@ -1338,6 +1358,32 @@ export default function PenhuLandingPage({ variant = 'starter' }: { variant?: La
 
         {(selectedBatchId || leavingReserved) && !signupSubmitted && (
           <div className="hud-form-outer" data-leaving={leavingReserved}>
+
+          {/* PENHU OAuth 登入區塊 */}
+          {!oauthUser ? (
+            <div style={{ marginBottom: 16, padding: '12px 16px', background: 'rgba(255,255,255,0.04)', borderRadius: 10, border: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.88em' }}>已是 PENHU 聯盟會員？</span>
+              <a
+                href={`/api/oauth/login?returnTo=${encodeURIComponent('/#signup')}`}
+                style={{ display: 'inline-block', padding: '6px 16px', background: 'linear-gradient(135deg,#f97316,#ea580c)', color: '#fff', borderRadius: 6, fontWeight: 700, fontSize: '0.88em', textDecoration: 'none', letterSpacing: '0.05em' }}
+              >
+                PENHU 會員一鍵帶入資料
+              </a>
+              {oauthError && <span style={{ color: '#ff6b6b', fontSize: '0.8em' }}>登入失敗，請重試</span>}
+            </div>
+          ) : (
+            <div style={{ marginBottom: 16, padding: '10px 16px', background: 'rgba(249,115,22,0.1)', borderRadius: 10, border: '1px solid rgba(249,115,22,0.3)', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <span style={{ color: '#fb923c', fontSize: '0.88em' }}>✓ 已登入：<strong>{oauthUser.name}</strong>（{oauthUser.shortCode}）</span>
+              <button
+                type="button"
+                onClick={() => fetch('/api/oauth/me', { method: 'DELETE' }).then(() => { setOauthUser(null); setPrefill({}); })}
+                style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', fontSize: '0.8em', cursor: 'pointer' }}
+              >
+                登出
+              </button>
+            </div>
+          )}
+
           <form key={Object.values(prefill).join('|')} className="hud-form" noValidate onSubmit={handleSignupSubmit}>
             <label>
               <span>{texts.formLineLabel}</span>
@@ -1345,7 +1391,19 @@ export default function PenhuLandingPage({ variant = 'starter' }: { variant?: La
             </label>
             <label>
               <span>{texts.formLimeLabel}</span>
-              <input name="line_id" type="text" placeholder={texts.formLimePlaceholder} defaultValue={prefill.line_id} />
+              <input
+                name="line_id"
+                type="text"
+                placeholder={texts.formLimePlaceholder}
+                defaultValue={prefill.line_id}
+                onBlur={(e) => {
+                  // TODO: 當 member.penhu.xyz 支援 PATCH /api/oauth/userinfo 後，在這裡把 LINE ID 存回會員系統
+                  // if (oauthUser && e.target.value) {
+                  //   fetch('/api/oauth/update-line', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ lineId: e.target.value }) });
+                  // }
+                  void e;
+                }}
+              />
             </label>
             <label>
               <span>{texts.formEmailLabel}</span>
