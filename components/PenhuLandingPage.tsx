@@ -359,6 +359,19 @@ export default function PenhuLandingPage({ variant = 'starter' }: { variant?: La
   const [isSubmittingSignup, setIsSubmittingSignup] = useState(false);
   const [signupSubmitError, setSignupSubmitError] = useState('');
   const [emailInput, setEmailInput] = useState('');
+  const [prefill, setPrefill] = useState<Record<string, string>>({});
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search);
+    const vals: Record<string, string> = {
+      line_name: p.get('lineName') ?? '',
+      line_id: p.get('lineId') ?? '',
+      email: p.get('email') ?? '',
+      phone: p.get('phone') ?? '',
+      okx_uid: p.get('uid') ?? '',
+      ref: p.get('ref') ?? '',
+    };
+    if (Object.values(vals).some(Boolean)) setPrefill(vals);
+  }, []);
   const [recaptchaReady, setRecaptchaReady] = useState(false);
   const [reserveDeadlineMs, setReserveDeadlineMs] = useState<number | null>(null);
   const [reserveSecondsLeft, setReserveSecondsLeft] = useState(RESERVE_WINDOW_SECONDS);
@@ -1325,14 +1338,14 @@ export default function PenhuLandingPage({ variant = 'starter' }: { variant?: La
 
         {(selectedBatchId || leavingReserved) && !signupSubmitted && (
           <div className="hud-form-outer" data-leaving={leavingReserved}>
-          <form className="hud-form" noValidate onSubmit={handleSignupSubmit}>
+          <form key={Object.values(prefill).join('|')} className="hud-form" noValidate onSubmit={handleSignupSubmit}>
             <label>
               <span>{texts.formLineLabel}</span>
-              <input name="line_name" type="text" placeholder={texts.formLinePlaceholder} />
+              <input name="line_name" type="text" placeholder={texts.formLinePlaceholder} defaultValue={prefill.line_name} />
             </label>
             <label>
               <span>{texts.formLimeLabel}</span>
-              <input name="line_id" type="text" placeholder={texts.formLimePlaceholder} />
+              <input name="line_id" type="text" placeholder={texts.formLimePlaceholder} defaultValue={prefill.line_id} />
             </label>
             <label>
               <span>{texts.formEmailLabel}</span>
@@ -1345,12 +1358,13 @@ export default function PenhuLandingPage({ variant = 'starter' }: { variant?: La
                 autoComplete="email"
                 placeholder={texts.formEmailPlaceholder}
                 list="email-domain-suggestions"
+                defaultValue={prefill.email}
                 onChange={(e) => setEmailInput(e.currentTarget.value)}
               />
             </label>
             <label>
               <span>{texts.formPhoneLabel}</span>
-              <input name="phone" type="tel" placeholder={texts.formPhonePlaceholder} />
+              <input name="phone" type="tel" placeholder={texts.formPhonePlaceholder} defaultValue={prefill.phone} />
             </label>
             <label>
               <span style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
@@ -1359,7 +1373,7 @@ export default function PenhuLandingPage({ variant = 'starter' }: { variant?: La
                   還沒「會員編號」點此領取
                 </a>
               </span>
-              <input name="okx_uid" type="text" placeholder={texts.formUidPlaceholder} />
+              <input name="okx_uid" type="text" placeholder={texts.formUidPlaceholder} defaultValue={prefill.okx_uid} />
             </label>
             <input
               name="website_url"
@@ -1377,6 +1391,9 @@ export default function PenhuLandingPage({ variant = 'starter' }: { variant?: La
                 pointerEvents: 'none',
               }}
             />
+            {prefill.ref && (
+              <input name="ref" type="hidden" value={prefill.ref} />
+            )}
             <datalist id="email-domain-suggestions">
               {emailSuggestions.map((value) => (
                 <option key={value} value={value} />

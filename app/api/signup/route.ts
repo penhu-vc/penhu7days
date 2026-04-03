@@ -19,6 +19,7 @@ type SignupPayload = {
   interestAreas?: string[];
   captchaToken?: string;
   websiteUrl?: string;
+  ref?: string;
 };
 
 type CaptchaFailureCode =
@@ -149,6 +150,7 @@ function validatePayload(raw: unknown): { ok: true; data: SignupPayload } | { ok
   const budgetAmount = Number(data.budgetAmount);
   const captchaToken = String(data.captchaToken ?? '').trim();
   const websiteUrl = String(data.websiteUrl ?? '').trim();
+  const ref = String(data.ref ?? '').trim().slice(0, 80);
   const courseTypeRaw = String(data.courseType ?? '').trim().toLowerCase();
   const landingVariantRaw = String(data.landingVariant ?? '').trim().toLowerCase();
 
@@ -199,6 +201,7 @@ function validatePayload(raw: unknown): { ok: true; data: SignupPayload } | { ok
       interestAreas,
       captchaToken: captchaToken || undefined,
       websiteUrl: websiteUrl || undefined,
+      ref: ref || undefined,
       courseType: (courseTypeRaw || undefined) as CourseType | undefined,
       landingVariant: (landingVariantRaw || undefined) as LandingVariant | undefined,
     },
@@ -519,7 +522,7 @@ async function appendSignupToSpreadsheet(params: {
             (params.data.interestAreas || []).join('、'),
             params.ip,
             params.userAgent,
-            'penhu7days-web',
+            params.data.ref ? `ref:${params.data.ref}` : 'penhu7days-web',
           ]],
         },
       });
@@ -564,7 +567,7 @@ async function appendSignupToSpreadsheet(params: {
             params.data.budgetAmount,
             params.ip,
             params.userAgent,
-            'penhu7days-web',
+            params.data.ref ? `ref:${params.data.ref}` : 'penhu7days-web',
           ]],
         },
       });
