@@ -237,6 +237,7 @@ const batchDefs = [
   { id: 'batch-1', label: '第一梯', date: '03/09 - 03/15', endDate: new Date(2026, 2, 8) },
   { id: 'batch-2', label: '第二梯', date: '03/23 - 03/29', endDate: new Date(2026, 2, 22) },
   { id: 'batch-3', label: '第三梯', date: '04/06 - 04/12', endDate: new Date(2026, 3, 5) },
+  { id: 'batch-99', label: '🛠 Debug', date: 'Dev only', endDate: new Date(2099, 11, 31) },
 ];
 
 function computeVisibleBatches() {
@@ -344,7 +345,9 @@ export default function PenhuLandingPage({ variant = 'starter' }: { variant?: La
   const [portraitMobileTuning, setPortraitMobileTuning] = useState<LayoutTuning>(defaultPortraitMobileTuning);
   const [isPortrait, setIsPortrait] = useState(false);
   const [isMobileViewport, setIsMobileViewport] = useState(false);
-  const [selectedBatchId, setSelectedBatchId] = useState<string | null>(null);
+  const [selectedBatchId, setSelectedBatchId] = useState<string | null>(() =>
+    typeof window !== 'undefined' ? sessionStorage.getItem('penhu_selected_batch') : null
+  );
   const [knowledgeLevel, setKnowledgeLevel] = useState<number | null>(null);
   const [knowledgeRequiredBlink, setKnowledgeRequiredBlink] = useState(false);
   const [batchRequiredBlink, setBatchRequiredBlink] = useState(false);
@@ -460,6 +463,7 @@ export default function PenhuLandingPage({ variant = 'starter' }: { variant?: La
       // After CSS transition ends, clear state THEN center (meta is gone → correct layout)
       setTimeout(() => {
         setSelectedBatchId(null);
+        sessionStorage.removeItem('penhu_selected_batch');
         setEnrollReserved(false);
         setLeavingReserved(false);
         setBatchCheckState('idle');
@@ -482,6 +486,7 @@ export default function PenhuLandingPage({ variant = 'starter' }: { variant?: La
       return;
     }
     setSelectedBatchId(batchId);
+    sessionStorage.setItem('penhu_selected_batch', batchId);
     setEnrollReserved(true);
     setBatchCheckState('checking');
     setSignupSuccess(false);
@@ -612,6 +617,7 @@ export default function PenhuLandingPage({ variant = 'starter' }: { variant?: La
       setSignupSuccess(false);
       setSignupSubmitted(false);
       setSelectedBatchId(null);
+      sessionStorage.removeItem('penhu_selected_batch');
       setKnowledgeLevel(null);
       setKnowledgeRequiredBlink(false);
       setBudgetAmount(1010000);
@@ -802,6 +808,21 @@ export default function PenhuLandingPage({ variant = 'starter' }: { variant?: La
       setSignupSubmitted(true);
       setEnrollReserved(false);
       setReserveDeadlineMs(null);
+
+      // 如果已登入且有填寫 LINE 資料，同步到會員系統
+      if (oauthUser && payload.lineId) {
+        fetch('/api/oauth/update-line-id', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            lineName: payload.lineName,
+            lineId: payload.lineId,
+            phone: payload.phone,
+            knowledgeLevel: payload.knowledgeLevel,
+            budgetAmount: payload.budgetAmount,
+          }),
+        }).catch((err) => console.error('Failed to update member info:', err));
+      }
     } catch {
       setSignupSubmitError('送出失敗，請稍後再試。');
     } finally {
@@ -1302,11 +1323,17 @@ export default function PenhuLandingPage({ variant = 'starter' }: { variant?: La
         {!signupUnlocked && (
           <button
             className={`signup-unlock-overlay unified-lock-overlay ${signupUnlocking ? 'unlocking' : ''}`}
-            onClick={() => triggerSignupUnlock()}
+            onClick={() => {
+              if (oauthUser) {
+                triggerSignupUnlock();
+              } else {
+                window.location.href = `/api/oauth/login?returnTo=${encodeURIComponent('/#signup')}`;
+              }
+            }}
             type="button"
           >
-            <strong>{texts.step1Title}</strong>
-            <span>{texts.step2UnlockBtnIdle}</span>
+            <strong>{oauthUser ? '已登入' : '登入聯盟帳號'}</strong>
+            <span>{oauthUser ? '開始報名' : '點擊登入'}</span>
           </button>
         )}
         <header>
