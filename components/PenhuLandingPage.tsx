@@ -237,7 +237,6 @@ const batchDefs = [
   { id: 'batch-1', label: '第一梯', date: '03/09 - 03/15', endDate: new Date(2026, 2, 8) },
   { id: 'batch-2', label: '第二梯', date: '03/23 - 03/29', endDate: new Date(2026, 2, 22) },
   { id: 'batch-3', label: '第三梯', date: '04/06 - 04/12', endDate: new Date(2026, 3, 5) },
-  { id: 'batch-99', label: '🛠 Debug', date: 'Dev only', endDate: new Date(2099, 11, 31) },
 ];
 
 function computeVisibleBatches() {
