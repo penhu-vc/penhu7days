@@ -305,6 +305,7 @@ export default function ProV2LandingPage() {
   const [websiteUrl, setWebsiteUrl] = useState('');
   const [submitState, setSubmitState] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
   const [submitMessage, setSubmitMessage] = useState('');
+  const [batchError, setBatchError] = useState(false);
   const [batches, setBatches] = useState<Batch[]>(batchesFallback);
 
   useEffect(() => {
@@ -416,6 +417,8 @@ export default function ProV2LandingPage() {
     if (!selectedBatch) {
       setSubmitState('error');
       setSubmitMessage('請先選擇梯次再送出申請。');
+      setBatchError(true);
+      setTimeout(() => setBatchError(false), 3000);
       const batchSection = document.querySelector('[class*="batchSection"], [class*="batchRow"], [class*="batchCard"]');
       if (batchSection) batchSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
       return;
@@ -726,7 +729,9 @@ export default function ProV2LandingPage() {
 
             <div className={styles.batchSection}>
               <div className={styles.batchHeader}>
-                <span className={styles.batchLabel}>選擇梯次</span>
+                <span className={styles.batchLabel} style={batchError ? { color: '#ff4d4d' } : undefined}>
+                  選擇梯次{batchError && ' ← 請先選擇！'}
+                </span>
                 {selectedBatch && batchCheckState === 'checking' && (
                   <span className={styles.batchStatusChecking}>
                     <span className={styles.batchStatusSpinner} />
