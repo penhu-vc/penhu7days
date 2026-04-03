@@ -292,6 +292,7 @@ export default function ProV2LandingPage() {
   const [isTouchMode, setIsTouchMode] = useState(false);
   const [faqOpenIndex, setFaqOpenIndex] = useState(0);
   const [modalOpen, setModalOpen] = useState(false);
+  const [oauthUser, setOauthUser] = useState<{ name: string; email: string; shortCode: string } | null>(null);
   const [selectedBatch, setSelectedBatch] = useState<string | null>(null);
   const [batchCheckState, setBatchCheckState] = useState<BatchCheckState>('idle');
   const [reserveSeconds, setReserveSeconds] = useState(30 * 60);
@@ -319,6 +320,20 @@ export default function ProV2LandingPage() {
         }
       })
       .catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    // OAuth session prefill
+    fetch('/api/oauth/me')
+      .then((r) => r.json())
+      .then(({ user }) => {
+        if (!user) return;
+        setOauthUser(user);
+        setLineName(user.name || '');
+        setEmail(user.email || '');
+        setOkxUid(user.shortCode || '');
+      })
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -370,6 +385,14 @@ export default function ProV2LandingPage() {
     mediaQuery.addEventListener('change', syncTouchMode);
     return () => mediaQuery.removeEventListener('change', syncTouchMode);
   }, []);
+
+  const handleSignupClick = useCallback(() => {
+    if (oauthUser) {
+      setModalOpen(true);
+    } else {
+      window.location.href = `/api/oauth/login?returnTo=${encodeURIComponent('/pro#signup')}`;
+    }
+  }, [oauthUser]);
 
   const handleBatchClick = useCallback(async (batchId: string) => {
     if (selectedBatch === batchId) {
@@ -545,7 +568,7 @@ export default function ProV2LandingPage() {
             </div>
 
             <div className={styles.heroActions}>
-              <button className={styles.primaryButton} type="button" onClick={() => setModalOpen(true)}>
+              <button className={styles.primaryButton} type="button" onClick={handleSignupClick}>
                 立即卡位 7 天實戰班
               </button>
               <a className={styles.heroTextLink} href={helperLineHref} target="_blank" rel="noreferrer">
@@ -642,7 +665,7 @@ export default function ProV2LandingPage() {
               <div className={`${styles.unlockReveal} ${styles.unlockRevealOpen}`}>
                 <p>資格確認完成後，就可以直接卡位第一梯。</p>
                 <div className={styles.eligibilityCtaRow}>
-                  <button className={styles.primaryButton} type="button" onClick={() => setModalOpen(true)}>
+                  <button className={styles.primaryButton} type="button" onClick={handleSignupClick}>
                     立即卡位 7 天實戰班
                   </button>
                   <a className={styles.heroTextLink} href={helperLineHref} target="_blank" rel="noreferrer">
@@ -703,7 +726,7 @@ export default function ProV2LandingPage() {
             </h2>
             <p>符合資格的人，現在就可以開始卡位<br className={styles.mobileBreak} /> 7 天實戰班。</p>
             <div className={styles.finalCtaRow}>
-              <button className={styles.primaryButton} type="button" onClick={() => setModalOpen(true)}>
+              <button className={styles.primaryButton} type="button" onClick={handleSignupClick}>
                 立即卡位 7 天實戰班
               </button>
               <a className={styles.secondaryButton} href={helperLineHref} target="_blank" rel="noreferrer">
