@@ -387,12 +387,8 @@ export default function ProV2LandingPage() {
   }, []);
 
   const handleSignupClick = useCallback(() => {
-    if (oauthUser) {
-      setModalOpen(true);
-    } else {
-      window.location.href = `/api/oauth/login?returnTo=${encodeURIComponent('/pro#signup')}`;
-    }
-  }, [oauthUser]);
+    setModalOpen(true);
+  }, []);
 
   const handleBatchClick = useCallback(async (batchId: string) => {
     if (selectedBatch === batchId) {
