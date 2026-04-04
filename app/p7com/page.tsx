@@ -10,7 +10,7 @@ const SITE_LINKS = [
   { label: '實戰班', url: 'https://penhu.xyz/pro', variant: 'prov2' },
 ] as const;
 
-type MainTab = 'signups' | 'batches';
+type MainTab = 'signups' | 'batches' | 'apidocs';
 type SignupTab = 'starter' | 'proV2';
 
 const SIGNUP_TAB_LABELS: Record<SignupTab, string> = {
@@ -438,6 +438,184 @@ function BatchManager() {
   );
 }
 
+// ── API Docs Panel ────────────────────────────────────────────────────────────
+
+const SITE = 'https://penhu.xyz';
+
+const API_ENDPOINTS = [
+  {
+    id: 'signups-all',
+    label: '所有報名資料',
+    method: 'GET',
+    path: '/api/v1/signups',
+    desc: '回傳新手班、實戰班、實戰班v2 的所有報名記錄。',
+    params: [],
+    example: `curl "${SITE}/api/v1/signups" \\\n  -H "x-api-key: YOUR_ADMIN_TOKEN"`,
+    response: `{\n  "ok": true,\n  "total": 78,\n  "starter": { "total": 75, "data": [...] },\n  "pro":     { "total": 0,  "data": [] },\n  "prov2":   { "total": 3,  "data": [...] }\n}`,
+  },
+  {
+    id: 'signups-starter',
+    label: '新手陪跑班報名',
+    method: 'GET',
+    path: '/api/v1/signups?variant=starter',
+    desc: '只回傳新手陪跑班報名資料。',
+    params: [{ name: 'variant', values: 'starter | prov2 | pro', note: '指定課程類型' }],
+    example: `curl "${SITE}/api/v1/signups?variant=starter" \\\n  -H "x-api-key: YOUR_ADMIN_TOKEN"`,
+    response: `{\n  "ok": true,\n  "variant": "starter",\n  "total": 75,\n  "data": [...]\n}`,
+  },
+  {
+    id: 'signups-prov2',
+    label: '7天實戰班報名',
+    method: 'GET',
+    path: '/api/v1/signups?variant=prov2',
+    desc: '只回傳 7天實戰班 v2 報名資料。',
+    params: [],
+    example: `curl "${SITE}/api/v1/signups?variant=prov2" \\\n  -H "x-api-key: YOUR_ADMIN_TOKEN"`,
+    response: `{\n  "ok": true,\n  "variant": "prov2",\n  "total": 3,\n  "data": [...]\n}`,
+  },
+  {
+    id: 'batches',
+    label: '梯次管理資料',
+    method: 'GET',
+    path: '/api/v1/batches',
+    desc: '回傳新手班與實戰班的梯次設定（id、日期、截止日）。',
+    params: [],
+    example: `curl "${SITE}/api/v1/batches" \\\n  -H "x-api-key: YOUR_ADMIN_TOKEN"`,
+    response: `{\n  "ok": true,\n  "starter": { "batches": [...] },\n  "prov2":   { "batches": [...] }\n}`,
+  },
+];
+
+function CopyBtn({ text }: { text: string }) {
+  const [copied, setCopied] = React.useState(false);
+  return (
+    <button
+      onClick={() => {
+        const doCopy = async () => {
+          if (navigator.clipboard && window.isSecureContext) {
+            await navigator.clipboard.writeText(text);
+          } else {
+            const el = document.createElement('textarea');
+            el.value = text;
+            el.style.cssText = 'position:fixed;opacity:0;pointer-events:none';
+            document.body.appendChild(el);
+            el.focus(); el.select();
+            document.execCommand('copy');
+            document.body.removeChild(el);
+          }
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1500);
+        };
+        doCopy().catch(() => {});
+      }}
+      style={{
+        position: 'absolute', top: 8, right: 8,
+        padding: '3px 10px', fontSize: '0.72rem',
+        background: copied ? '#16a34a' : '#3b3b5c',
+        color: '#fff', border: 'none', borderRadius: 5, cursor: 'pointer',
+        transition: 'background 0.2s',
+      }}
+    >
+      {copied ? '✓ 已複製' : '複製'}
+    </button>
+  );
+}
+
+function ApiDocsPanel() {
+  const [copiedAll, setCopiedAll] = React.useState(false);
+
+  function copyAll() {
+    const text = API_ENDPOINTS.map(ep =>
+      `## ${ep.label}\n${ep.method} ${SITE}${ep.path}\n\n範例:\n${ep.example}\n\n回傳:\n${ep.response}`
+    ).join('\n\n---\n\n');
+    const doCopy = async () => {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const el = document.createElement('textarea');
+        el.value = text;
+        el.style.cssText = 'position:fixed;opacity:0;pointer-events:none';
+        document.body.appendChild(el);
+        el.focus(); el.select();
+        document.execCommand('copy');
+        document.body.removeChild(el);
+      }
+      setCopiedAll(true);
+      setTimeout(() => setCopiedAll(false), 1800);
+    };
+    doCopy().catch(() => {});
+  }
+
+  return (
+    <div style={{ color: '#e2e0f0', fontFamily: 'system-ui, sans-serif' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+        <p style={{ color: '#888', fontSize: '0.85rem', margin: 0 }}>
+          Base URL: <code style={{ color: '#a78bfa' }}>{SITE}</code>
+          {'　　'}認證: <code style={{ color: '#a78bfa' }}>x-api-key: ADMIN_TOKEN</code>
+        </p>
+        <button
+          onClick={copyAll}
+          style={{
+            padding: '6px 16px', fontSize: '0.82rem',
+            background: copiedAll ? '#16a34a' : '#7c3aed',
+            color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer',
+            fontWeight: 600, whiteSpace: 'nowrap', transition: 'background 0.2s',
+          }}
+        >
+          {copiedAll ? '✓ 已複製全部' : '📋 一鍵複製全部'}
+        </button>
+      </div>
+
+      <div style={{ background: '#1a1a2e', border: '1px solid #2a2a4a', borderRadius: 10, padding: '14px 18px', marginBottom: 28 }}>
+        <div style={{ fontSize: '0.8rem', color: '#888', marginBottom: 6 }}>🔑 ADMIN_TOKEN 就是後台登入密碼（或後台設定頁面複製）</div>
+      </div>
+
+      {API_ENDPOINTS.map((ep) => (
+        <div key={ep.id} style={{ background: '#1a1a2e', border: '1px solid #2a2a4a', borderRadius: 12, marginBottom: 20, overflow: 'hidden' }}>
+          <div style={{ padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 12, borderBottom: '1px solid #2a2a4a' }}>
+            <span style={{ background: '#166534', color: '#4ade80', padding: '2px 8px', borderRadius: 5, fontSize: '0.75rem', fontWeight: 700 }}>
+              {ep.method}
+            </span>
+            <code style={{ color: '#a78bfa', fontSize: '0.9rem' }}>{ep.path}</code>
+            <span style={{ color: '#ccc', fontSize: '0.85rem' }}>{ep.label}</span>
+          </div>
+          <div style={{ padding: '12px 18px' }}>
+            <p style={{ color: '#aaa', fontSize: '0.83rem', margin: '0 0 12px' }}>{ep.desc}</p>
+
+            {ep.params.length > 0 && (
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ fontSize: '0.75rem', color: '#666', marginBottom: 4 }}>Query Params</div>
+                {ep.params.map((p) => (
+                  <div key={p.name} style={{ display: 'flex', gap: 10, fontSize: '0.8rem', color: '#ccc' }}>
+                    <code style={{ color: '#fbbf24' }}>{p.name}</code>
+                    <span style={{ color: '#60a5fa' }}>{p.values}</span>
+                    <span style={{ color: '#888' }}>{p.note}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div style={{ fontSize: '0.75rem', color: '#666', marginBottom: 4 }}>範例指令</div>
+            <div style={{ position: 'relative', marginBottom: 12 }}>
+              <pre style={{ background: '#0d0d1a', borderRadius: 8, padding: '10px 12px', fontSize: '0.78rem', color: '#e2e0f0', margin: 0, overflowX: 'auto', paddingRight: 70 }}>
+                {ep.example}
+              </pre>
+              <CopyBtn text={ep.example} />
+            </div>
+
+            <div style={{ fontSize: '0.75rem', color: '#666', marginBottom: 4 }}>回傳格式</div>
+            <div style={{ position: 'relative' }}>
+              <pre style={{ background: '#0d0d1a', borderRadius: 8, padding: '10px 12px', fontSize: '0.75rem', color: '#86efac', margin: 0, overflowX: 'auto', paddingRight: 70 }}>
+                {ep.response}
+              </pre>
+              <CopyBtn text={ep.response} />
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ── Main Admin Page ───────────────────────────────────────────────────────────
 
 export default function AdminPage() {
@@ -558,7 +736,7 @@ export default function AdminPage() {
             background: '#7c3aed', color: '#fff', borderRadius: 5,
             padding: '2px 8px', fontSize: '0.7rem', fontWeight: 600,
           }}>
-            {mainTab === 'batches' ? '梯次管理' : '報名管理'}
+            {mainTab === 'batches' ? '梯次管理' : mainTab === 'apidocs' ? 'API 文件' : '報名管理'}
           </span>
           {/* Site links */}
           {SITE_LINKS.map(s => (
@@ -658,10 +836,16 @@ export default function AdminPage() {
           <button style={tabStyle(mainTab === 'batches')} onClick={() => setMainTab('batches')}>
             🗓 梯次管理
           </button>
+          <button style={tabStyle(mainTab === 'apidocs')} onClick={() => setMainTab('apidocs')}>
+            📡 API 文件
+          </button>
         </div>
 
         {/* ── BATCHES TAB ── */}
         {mainTab === 'batches' && <BatchManager />}
+
+        {/* ── API DOCS TAB ── */}
+        {mainTab === 'apidocs' && <ApiDocsPanel />}
 
         {/* ── SIGNUPS TAB ── */}
         {mainTab === 'signups' && (

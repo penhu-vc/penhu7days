@@ -4,7 +4,7 @@ import { google } from 'googleapis';
 const SHEETS_SCOPE = 'https://www.googleapis.com/auth/spreadsheets.readonly';
 
 function isAuthorized(req: NextRequest): boolean {
-  const token = (process.env.ADMIN_TOKEN || '').trim();
+  const token = (process.env.API_TOKEN || process.env.ADMIN_TOKEN || '').trim();
   if (!token) return false;
   const header = req.headers.get('x-api-key') || req.headers.get('authorization')?.replace('Bearer ', '') || '';
   return header === token;

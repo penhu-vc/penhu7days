@@ -364,6 +364,13 @@ export default function PenhuLandingPage({ variant = 'starter' }: { variant?: La
   const [prefill, setPrefill] = useState<Record<string, string>>({});
   const [oauthUser, setOauthUser] = useState<{ name: string; email: string; shortCode: string } | null>(null);
   const [oauthError, setOauthError] = useState(false);
+  // OKX UID 查詢步驟
+  const [uidStepVisible, setUidStepVisible] = useState(false);
+  const [uidInput, setUidInput] = useState('');
+  const [uidLookupLoading, setUidLookupLoading] = useState(false);
+  const [uidLookupError, setUidLookupError] = useState('');
+  const [uidMemberId, setUidMemberId] = useState<number | null>(null);
+  const [uidLookupDone, setUidLookupDone] = useState(false);
 
   useEffect(() => {
     // URL params prefill（外部網站跳轉）
@@ -379,18 +386,41 @@ export default function PenhuLandingPage({ variant = 'starter' }: { variant?: La
     };
     if (Object.values(vals).some(Boolean)) setPrefill(vals);
 
-    // OAuth session prefill
+    // 從 penhu 網站跳來（URL 有 uid）→ 自動查詢，不需要 OAuth
+    const urlUid = p.get('uid')?.trim();
+    if (urlUid) {
+      setUidInput(urlUid);
+      fetch(`/api/oauth/member-lookup?okxUid=${encodeURIComponent(urlUid)}`)
+        .then(r => r.json())
+        .then((data: { ok: boolean; found?: boolean; member?: Record<string, unknown> }) => {
+          if (data.ok && data.found && data.member) {
+            const m = data.member;
+            const str = (v: unknown) => (typeof v === 'string' ? v : typeof v === 'number' ? String(v) : '');
+            if (m.id) setUidMemberId(m.id as number);
+            const shortCode = str(m.shortCode ?? m.code ?? m.memberCode ?? m.short_code ?? '');
+            setPrefill(prev => ({
+              ...prev,
+              ...(shortCode ? { okx_uid: shortCode } : {}),
+              ...(str(m.lineId) ? { line_id: str(m.lineId) } : {}),
+              ...(str(m.phone) ? { phone: str(m.phone) } : {}),
+              ...(str(m.email) ? { email: str(m.email) } : {}),
+            }));
+          } else {
+            // 找不到會員
+            setPrefill(prev => ({ ...prev }));
+          }
+          setUidLookupDone(true);
+        })
+        .catch(() => setUidLookupDone(true));
+      return; // 不走 OAuth
+    }
+
+    // OAuth session（保留相容性，但新流程不主動觸發）
     fetch('/api/oauth/me')
       .then((r) => r.json())
       .then(({ user }) => {
         if (!user) return;
         setOauthUser(user);
-        setPrefill((prev) => ({
-          ...prev,
-          line_name: prev.line_name || user.name || '',
-          email: prev.email || user.email || '',
-          okx_uid: prev.okx_uid || user.shortCode || '',
-        }));
       })
       .catch(() => {});
   }, []);
@@ -686,7 +716,6 @@ export default function PenhuLandingPage({ variant = 'starter' }: { variant?: La
 
     const formData = new FormData(formEl);
     const requiredFields: Array<{ name: string; label: string }> = [
-      { name: 'line_name', label: 'LINE 名稱' },
       { name: 'line_id', label: 'LINE ID' },
       { name: 'email', label: 'Email' },
       { name: 'phone', label: '電話' },
@@ -821,6 +850,15 @@ export default function PenhuLandingPage({ variant = 'starter' }: { variant?: La
             budgetAmount: payload.budgetAmount,
           }),
         }).catch((err) => console.error('Failed to update member info:', err));
+      }
+
+      // 若有查到 penhu 會員且有電話，更新電話（後6位為登入密碼）
+      if (oauthUser && uidMemberId && payload.phone) {
+        fetch('/api/oauth/update-phone', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ memberId: uidMemberId, phone: payload.phone }),
+        }).catch((err) => console.error('Failed to update phone:', err));
       }
     } catch {
       setSignupSubmitError('送出失敗，請稍後再試。');
@@ -998,6 +1036,60 @@ export default function PenhuLandingPage({ variant = 'starter' }: { variant?: La
       setSignupUnlocking(false);
     }, 560);
   }, [signupUnlocked, signupUnlocking]);
+
+  const handleUidLookup = useCallback(async () => {
+    const uid = uidInput.trim();
+    if (!uid || uidLookupLoading) return;
+    setUidLookupLoading(true);
+    setUidLookupError('');
+    try {
+      const res = await fetch(`/api/oauth/member-lookup?okxUid=${encodeURIComponent(uid)}`);
+      const data = await res.json() as {
+        ok: boolean;
+        found?: boolean;
+        member?: Record<string, unknown>;
+        error?: string;
+      };
+
+      if (!data.ok) {
+        if (data.error === 'MEMBER_API_KEY_NOT_SET') {
+          // API Key 未設定，略過查詢直接開放表單
+          setUidStepVisible(false);
+          triggerSignupUnlock();
+          return;
+        }
+        setUidLookupError('查詢失敗，請稍後再試');
+        return;
+      }
+
+      if (!data.found || !data.member) {
+        setUidLookupError('查無此 OKX UID，請確認後再試，或點「略過」手動填寫');
+        return;
+      }
+
+      const m = data.member;
+      const str = (v: unknown) => (typeof v === 'string' ? v : typeof v === 'number' ? String(v) : '');
+      // 設定 memberId 供提交時更新電話用
+      if (m.id) setUidMemberId(m.id as number);
+      // 短碼（試幾個常見欄位名稱）
+      const shortCode = str(m.shortCode ?? m.code ?? m.memberCode ?? m.short_code ?? '');
+      // 預填表單
+      setPrefill(prev => ({
+        ...prev,
+        ...(shortCode ? { okx_uid: shortCode } : {}),
+        ...(str(m.lineId) ? { line_id: str(m.lineId) } : {}),
+        ...(str(m.phone) ? { phone: str(m.phone) } : {}),
+        ...(str(m.email) ? { email: str(m.email) } : {}),
+      }));
+
+      setUidStepVisible(false);
+      triggerSignupUnlock();
+    } catch {
+      setUidLookupError('網路錯誤，請稍後再試');
+    } finally {
+      setUidLookupLoading(false);
+    }
+  }, [uidInput, uidLookupLoading, triggerSignupUnlock]);
 
   const preloadImage = useCallback((src: string) => {
     return new Promise<void>((resolve) => {
@@ -1319,21 +1411,67 @@ export default function PenhuLandingPage({ variant = 'starter' }: { variant?: La
         data-reveal
       >
         {!signupUnlocked && <p className="lock-step-label">{texts.step1SysLabel}</p>}
-        {!signupUnlocked && (
+        {!signupUnlocked && !uidStepVisible && (
           <button
             className={`signup-unlock-overlay unified-lock-overlay ${signupUnlocking ? 'unlocking' : ''}`}
             onClick={() => {
-              if (oauthUser) {
+              if (uidLookupDone) {
                 triggerSignupUnlock();
               } else {
-                window.location.href = `/api/oauth/login?returnTo=${encodeURIComponent('/#signup')}`;
+                setUidStepVisible(true);
               }
             }}
             type="button"
           >
-            <strong>{oauthUser ? '已登入' : '登入聯盟帳號'}</strong>
-            <span>{oauthUser ? '開始報名' : '點擊登入'}</span>
+            <strong>輸入 OKX UID 開始報名</strong>
+            <span>{uidLookupDone ? '點擊繼續' : '點擊填入'}</span>
           </button>
+        )}
+
+        {!signupUnlocked && uidStepVisible && (
+          <div className="signup-unlock-overlay unified-lock-overlay">
+            <strong style={{ fontSize: '1.05rem', letterSpacing: '0.03em' }}>輸入你的 OKX UID</strong>
+            <p style={{ color: 'var(--muted)', fontSize: '0.82rem', margin: 0, textAlign: 'center', maxWidth: 280 }}>
+              我們將從 PENHU 系統查詢你的資料，自動填入表單
+            </p>
+            <input
+              type="text"
+              value={uidInput}
+              onChange={e => { setUidInput(e.target.value); setUidLookupError(''); }}
+              placeholder="貼上你的 OKX UID"
+              style={{
+                width: '100%', maxWidth: 300, padding: '10px 14px',
+                background: 'rgba(255,255,255,0.6)', border: '1px solid rgba(66,146,255,0.4)',
+                borderRadius: 8, color: 'var(--ink)', fontSize: '0.95rem', outline: 'none',
+              }}
+              autoFocus
+              onKeyDown={e => { if (e.key === 'Enter') handleUidLookup(); }}
+            />
+            {uidLookupError && (
+              <p style={{ color: '#c0392b', fontSize: '0.82rem', margin: 0 }}>{uidLookupError}</p>
+            )}
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                type="button"
+                onClick={handleUidLookup}
+                disabled={uidLookupLoading || !uidInput.trim()}
+                className="btn-primary"
+                style={{ padding: '9px 24px', fontSize: '0.9rem', opacity: uidLookupLoading || !uidInput.trim() ? 0.5 : 1 }}
+              >
+                {uidLookupLoading ? '查詢中…' : '查詢 →'}
+              </button>
+              <span
+                role="button"
+                tabIndex={0}
+                onClick={() => { setUidStepVisible(false); triggerSignupUnlock(); }}
+                onKeyDown={e => { if (e.key === 'Enter') { setUidStepVisible(false); triggerSignupUnlock(); } }}
+                className="btn-code"
+                style={{ padding: '9px 16px', cursor: 'pointer', borderRadius: 8, fontSize: '0.85rem', display: 'inline-flex', alignItems: 'center' }}
+              >
+                略過
+              </span>
+            </div>
+          </div>
         )}
         <header>
           <p className="sys-label">{texts.step1SysLabel}</p>
@@ -1385,36 +1523,15 @@ export default function PenhuLandingPage({ variant = 'starter' }: { variant?: La
         {(selectedBatchId || leavingReserved) && !signupSubmitted && (
           <div className="hud-form-outer" data-leaving={leavingReserved}>
 
-          {/* PENHU OAuth 登入區塊 */}
-          {!oauthUser ? (
-            <div style={{ marginBottom: 16, padding: '12px 16px', background: 'rgba(255,255,255,0.04)', borderRadius: 10, border: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-              <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.88em' }}>已是 PENHU 聯盟會員？</span>
-              <a
-                href={`/api/oauth/login?returnTo=${encodeURIComponent('/#signup')}`}
-                style={{ display: 'inline-block', padding: '6px 16px', background: 'linear-gradient(135deg,#f97316,#ea580c)', color: '#fff', borderRadius: 6, fontWeight: 700, fontSize: '0.88em', textDecoration: 'none', letterSpacing: '0.05em' }}
-              >
-                PENHU 會員一鍵帶入資料
-              </a>
-              {oauthError && <span style={{ color: '#ff6b6b', fontSize: '0.8em' }}>登入失敗，請重試</span>}
+          {/* UID 查詢狀態提示 */}
+          {uidMemberId ? (
+            <div style={{ marginBottom: 16, padding: '10px 16px', background: 'rgba(249,115,22,0.1)', borderRadius: 10, border: '1px solid rgba(249,115,22,0.3)', display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ color: '#fb923c', fontSize: '0.88em' }}>✓ 已從 PENHU 系統帶入資料（OKX UID：{uidInput}）</span>
             </div>
-          ) : (
-            <div style={{ marginBottom: 16, padding: '10px 16px', background: 'rgba(249,115,22,0.1)', borderRadius: 10, border: '1px solid rgba(249,115,22,0.3)', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-              <span style={{ color: '#fb923c', fontSize: '0.88em' }}>✓ 已登入：<strong>{oauthUser.name}</strong>（{oauthUser.shortCode}）</span>
-              <button
-                type="button"
-                onClick={() => fetch('/api/oauth/me', { method: 'DELETE' }).then(() => { setOauthUser(null); setPrefill({}); })}
-                style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', fontSize: '0.8em', cursor: 'pointer' }}
-              >
-                登出
-              </button>
-            </div>
-          )}
+          ) : null}
 
           <form key={Object.values(prefill).join('|')} className="hud-form" noValidate onSubmit={handleSignupSubmit}>
-            <label>
-              <span>{texts.formLineLabel}</span>
-              <input name="line_name" type="text" placeholder={texts.formLinePlaceholder} defaultValue={prefill.line_name} />
-            </label>
+            <input type="hidden" name="line_name" value="" />
             <label>
               <span>{texts.formLimeLabel}</span>
               <input
