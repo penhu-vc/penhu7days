@@ -18,6 +18,15 @@ function cookieOptions() {
 }
 
 export async function GET(request: NextRequest) {
+  const tokenParam = request.nextUrl.searchParams.get('token')?.trim() || '';
+  const adminToken = getAdminToken();
+  if (tokenParam && adminToken && tokenParam === adminToken) {
+    const redirectTo = request.nextUrl.searchParams.get('next') || '/p7com';
+    const base = process.env.NEXT_PUBLIC_SITE_URL || `https://${request.headers.get('host')}`;
+    const res = NextResponse.redirect(new URL(redirectTo, base));
+    res.cookies.set(ADMIN_SESSION_COOKIE, adminToken, cookieOptions());
+    return res;
+  }
   return NextResponse.json({
     ok: true,
     authenticated: isAuthorizedAdminRequest(request),

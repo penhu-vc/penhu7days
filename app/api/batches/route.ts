@@ -130,14 +130,6 @@ export async function GET(request: NextRequest) {
   }
   const config = await loadConfig(variant);
 
-  // Dev-only: inject a debug batch so the form can be tested locally
-  if (process.env.NODE_ENV !== 'production') {
-    config.batches = [
-      ...config.batches,
-      { id: 'batch-99', label: '🛠 Debug', courseDate: 'Dev only', endDateIso: '2099-12-31', forceShow: true },
-    ];
-  }
-
   if (adminMode) {
     // Admin: return all batches (not filtered) with metadata
     const today = new Date();
