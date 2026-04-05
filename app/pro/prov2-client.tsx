@@ -308,6 +308,10 @@ export default function ProV2LandingPage() {
   const [submitMessage, setSubmitMessage] = useState('');
   const [batchError, setBatchError] = useState(false);
   const [batches, setBatches] = useState<Batch[]>(batchesFallback);
+  const [uidInputOpen, setUidInputOpen] = useState(false);
+  const [uidInputValue, setUidInputValue] = useState('');
+  const [uidLookupLoading, setUidLookupLoading] = useState(false);
+  const [uidLookupError, setUidLookupError] = useState('');
 
   useEffect(() => {
     fetch('/api/batches?variant=prov2', { cache: 'no-store' })
@@ -387,8 +391,59 @@ export default function ProV2LandingPage() {
   }, []);
 
   const handleSignupClick = useCallback(() => {
-    setModalOpen(true);
-  }, []);
+    if (oauthUser) {
+      setModalOpen(true);
+    } else {
+      setUidInputOpen(true);
+    }
+  }, [oauthUser]);
+
+  const handleUidLookup = useCallback(async () => {
+    const uid = uidInputValue.trim();
+    if (!uid || uidLookupLoading) return;
+    setUidLookupLoading(true);
+    setUidLookupError('');
+    try {
+      const res = await fetch(`/api/oauth/member-lookup?okxUid=${encodeURIComponent(uid)}`);
+      const data = await res.json() as {
+        ok: boolean;
+        found?: boolean;
+        member?: Record<string, unknown>;
+        error?: string;
+      };
+
+      if (!data.ok) {
+        if (data.error === 'MEMBER_API_KEY_NOT_SET') {
+          setUidInputOpen(false);
+          setModalOpen(true);
+          return;
+        }
+        setUidLookupError('查詢失敗，請稍後再試');
+        return;
+      }
+
+      if (!data.found || !data.member) {
+        setUidLookupError('查無此 OKX UID，請確認後再試，或點「略過」手動填寫');
+        return;
+      }
+
+      const m = data.member;
+      const str = (v: unknown) => (typeof v === 'string' ? v : typeof v === 'number' ? String(v) : '');
+      const shortCode = str(m.shortCode ?? m.code ?? m.memberCode ?? m.short_code ?? '');
+      setOauthUser({ name: str(m.name), email: str(m.email), shortCode: shortCode || uid });
+      setLineName(str(m.name) || str(m.lineName));
+      setEmail(str(m.email));
+      setOkxUid(shortCode || uid);
+      if (str(m.phone)) setPhone(str(m.phone));
+      if (str(m.lineId)) setLineId(str(m.lineId));
+      setUidInputOpen(false);
+      setModalOpen(true);
+    } catch {
+      setUidLookupError('網路錯誤，請稍後再試');
+    } finally {
+      setUidLookupLoading(false);
+    }
+  }, [uidInputValue, uidLookupLoading]);
 
   const handleBatchClick = useCallback(async (batchId: string) => {
     if (selectedBatch === batchId) {
@@ -732,6 +787,63 @@ export default function ProV2LandingPage() {
           </div>
         </section>
       </div>
+
+      {uidInputOpen && !oauthUser && (
+        <div className={styles.modalBackdrop} role="presentation" onClick={() => setUidInputOpen(false)}>
+          <div className={styles.modalPanel} role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()} style={{ maxWidth: 420, padding: '32px 28px' }}>
+            <div className={styles.modalHeader}>
+              <div className={styles.modalTitleBlock}>
+                <p className={styles.panelLabel}>MEMBER CHECK</p>
+                <h2>輸入你的 OKX UID</h2>
+              </div>
+              <button className={styles.closeButton} type="button" onClick={() => setUidInputOpen(false)}>
+                CLOSE
+              </button>
+            </div>
+            <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.85rem', margin: '8px 0 16px' }}>
+              我們將從 PENHU 系統查詢你的資料，自動填入表單
+            </p>
+            <input
+              type="text"
+              value={uidInputValue}
+              onChange={e => { setUidInputValue(e.target.value); setUidLookupError(''); }}
+              placeholder="貼上你的 OKX UID"
+              autoFocus
+              onKeyDown={e => { if (e.key === 'Enter') handleUidLookup(); }}
+              style={{
+                width: '100%', padding: '12px 14px',
+                background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)',
+                borderRadius: 8, color: '#fff', fontSize: '1rem', outline: 'none',
+              }}
+            />
+            {uidLookupError && (
+              <p style={{ color: '#ff6b6b', fontSize: '0.82rem', margin: '8px 0 0' }}>{uidLookupError}</p>
+            )}
+            <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+              <button
+                className={styles.primaryButton}
+                type="button"
+                onClick={handleUidLookup}
+                disabled={uidLookupLoading || !uidInputValue.trim()}
+                style={{ opacity: uidLookupLoading || !uidInputValue.trim() ? 0.5 : 1 }}
+              >
+                {uidLookupLoading ? '查詢中…' : '查詢'}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setUidInputOpen(false); setModalOpen(true); }}
+                style={{
+                  padding: '10px 20px', background: 'rgba(255,255,255,0.08)',
+                  border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8,
+                  color: 'rgba(255,255,255,0.6)', fontSize: '0.9rem', cursor: 'pointer',
+                }}
+              >
+                略過
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {modalOpen ? (
         <div className={styles.modalBackdrop} role="presentation" onClick={() => setModalOpen(false)}>
