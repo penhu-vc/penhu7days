@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 
 type RippleCell = { row: number; col: number } | null;
@@ -186,33 +186,16 @@ function DivGrid({
 function AdminLoginContent() {
   const searchParams = useSearchParams();
   const next = searchParams.get('next') || '/p7com';
-  const [token, setToken] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState('');
+  const errorParam = searchParams.get('error');
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setSubmitting(true);
-    setError('');
+  const errorMessage =
+    errorParam === 'forbidden'
+      ? '權限不足，僅限管理員與分析師登入。'
+      : errorParam === 'oauth'
+        ? '登入失敗，請重試。'
+        : '';
 
-    try {
-      const response = await fetch('/api/auth/session', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token }),
-      });
-      if (!response.ok) {
-        const payload = (await response.json().catch(() => null)) as { error?: string } | null;
-        setError(payload?.error === 'INVALID_TOKEN' ? 'Token 錯誤。' : '登入失敗。');
-        return;
-      }
-      window.location.href = next;
-    } catch {
-      setError('登入失敗。');
-    } finally {
-      setSubmitting(false);
-    }
-  }
+  const loginUrl = `/api/auth/admin-oauth/login?next=${encodeURIComponent(next)}`;
 
   return (
     <main
@@ -227,46 +210,65 @@ function AdminLoginContent() {
       }}
     >
       <BackgroundRippleEffect />
-      <form
-        onSubmit={handleSubmit}
+      <div
         style={{
           width: 'min(360px, 100%)',
           position: 'relative',
           zIndex: 10,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: '0.75rem',
         }}
       >
-        <input
-          type="password"
-          value={token}
-          onChange={(event) => setToken(event.target.value)}
-          placeholder=""
-          autoFocus
+        {errorMessage ? (
+          <p style={{ color: '#ff9e84', margin: '0 0 0.25rem', textAlign: 'center', fontSize: '0.9rem' }}>
+            {errorMessage}
+          </p>
+        ) : null}
+        <a
+          href={loginUrl}
           style={{
+            display: 'block',
             width: '100%',
             height: '58px',
             borderRadius: '20px',
-            border: '1px solid rgba(255, 188, 156, 0.24)',
-            background: 'linear-gradient(135deg, rgba(35, 23, 28, 0.84), rgba(16, 13, 20, 0.92))',
+            border: '1px solid rgba(255, 188, 156, 0.32)',
+            background: 'linear-gradient(135deg, rgba(255, 102, 61, 0.18), rgba(35, 23, 28, 0.84))',
             color: '#f7ece8',
-            padding: '0 1rem',
-            fontSize: '1.05rem',
-            outline: 'none',
-            marginBottom: error ? '0.75rem' : '0.9rem',
+            fontSize: '1rem',
+            fontWeight: 500,
+            letterSpacing: '0.04em',
+            textDecoration: 'none',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '0.6rem',
             boxShadow:
-              '0 22px 90px rgba(255, 102, 61, 0.18), inset 0 1px 0 rgba(255, 215, 190, 0.08)',
+              '0 22px 90px rgba(255, 102, 61, 0.2), inset 0 1px 0 rgba(255, 215, 190, 0.1)',
             backdropFilter: 'blur(18px)',
+            cursor: 'pointer',
+            transition: 'border-color 0.2s, box-shadow 0.2s',
           }}
-        />
-        {error ? (
-          <p style={{ color: '#ff9e84', margin: '0 0 0.8rem', textAlign: 'center' }}>{error}</p>
-        ) : null}
-        <button
-          type="submit"
-          disabled={submitting || !token.trim()}
-          style={{ display: 'none' }}
-          aria-hidden="true"
-        />
-      </form>
+          onMouseEnter={(e) => {
+            (e.currentTarget as HTMLAnchorElement).style.borderColor = 'rgba(255, 188, 156, 0.6)';
+            (e.currentTarget as HTMLAnchorElement).style.boxShadow =
+              '0 22px 90px rgba(255, 102, 61, 0.32), inset 0 1px 0 rgba(255, 215, 190, 0.15)';
+          }}
+          onMouseLeave={(e) => {
+            (e.currentTarget as HTMLAnchorElement).style.borderColor = 'rgba(255, 188, 156, 0.32)';
+            (e.currentTarget as HTMLAnchorElement).style.boxShadow =
+              '0 22px 90px rgba(255, 102, 61, 0.2), inset 0 1px 0 rgba(255, 215, 190, 0.1)';
+          }}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.85 }}>
+            <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
+            <polyline points="10 17 15 12 10 7" />
+            <line x1="15" y1="12" x2="3" y2="12" />
+          </svg>
+          使用 Penhu 帳號登入
+        </a>
+      </div>
     </main>
   );
 }

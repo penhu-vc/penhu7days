@@ -1,14 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 export const ADMIN_SESSION_COOKIE = 'penhu_admin_session';
+export const ADMIN_ALLOWED_ROLES = ['admin', 'analyst'];
 
-export function getAdminToken(): string {
-  return (process.env.ADMIN_TOKEN || '').trim();
+export type AdminSession = {
+  id: number;
+  name: string;
+  shortCode: string;
+  role: string;
+};
+
+export function parseAdminSession(value: string | undefined): AdminSession | null {
+  if (!value) return null;
+  try {
+    const data = JSON.parse(Buffer.from(value, 'base64').toString('utf8')) as AdminSession;
+    if (data && ADMIN_ALLOWED_ROLES.includes(data.role)) {
+      return data;
+    }
+  } catch {}
+  return null;
 }
 
 export function isAdminSessionValue(value: string | undefined): boolean {
-  const token = getAdminToken();
-  return Boolean(token) && value === token;
+  return parseAdminSession(value) !== null;
 }
 
 export function isAuthorizedAdminRequest(request: NextRequest): boolean {
