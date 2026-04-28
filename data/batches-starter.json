@@ -20,6 +20,13 @@
       "courseDate": "4/6 - 4/12",
       "endDateIso": "2026-04-05",
       "forceShow": false
+    },
+    {
+      "id": "batch-4",
+      "label": "第四梯",
+      "courseDate": "4/27 - 5/3",
+      "endDateIso": "2026-04-25",
+      "forceShow": false
     }
   ]
 }

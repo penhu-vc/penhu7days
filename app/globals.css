@@ -1396,6 +1396,8 @@ body:has(.hud-page.theme-elite-red) {
   padding: 1.35rem;
   position: relative;
   z-index: 12;
+  overflow-x: hidden;
+  min-width: 0;
 }
 
 .signup-hud {
@@ -1555,11 +1557,12 @@ body:has(.hud-page.theme-elite-red) {
 
 .batch-rail {
   margin-top: 0.95rem;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: visible;
   padding-top: 3px;
   padding-bottom: 4px;
-  -webkit-mask-image: linear-gradient(to right, transparent 0%, black 48px, black calc(100% - 48px), transparent 100%);
-  mask-image: linear-gradient(to right, transparent 0%, black 48px, black calc(100% - 48px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, transparent 0%, black 48px);
+  mask-image: linear-gradient(to right, transparent 0%, black 48px);
 }
 
 .batch-rail-list {
@@ -1577,8 +1580,9 @@ body:has(.hud-page.theme-elite-red) {
 .batch-card {
   --batch-unit-size: 112px;
   flex: 0 0 var(--batch-unit-size);
+  width: var(--batch-unit-size);
+  height: var(--batch-unit-size);
   aspect-ratio: 1 / 1;
-  min-height: var(--batch-unit-size);
   display: grid;
   grid-template-rows: auto auto 1fr;
   align-content: stretch;
@@ -1704,14 +1708,15 @@ body:has(.hud-page.theme-elite-red) {
 .batch-reserve-meta {
   --timer-scale-size: var(--reserve-timer-size, 26px);
   --timer-meta-size: var(--batch-unit-size, 112px);
-  display: grid;
-  align-content: center;
-  justify-items: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   gap: 0.34rem;
   flex-shrink: 0 !important;
   width: var(--timer-meta-size);
-  height: var(--timer-meta-size);
-  aspect-ratio: 1 / 1;
+  min-height: var(--timer-meta-size);
+  box-sizing: border-box;
   border: 1px solid rgba(149, 168, 197, 0.72);
   border-radius: 14px;
   background: linear-gradient(160deg, rgba(248, 252, 255, 0.56), rgba(228, 238, 252, 0.42));
@@ -1719,7 +1724,6 @@ body:has(.hud-page.theme-elite-red) {
   backdrop-filter: blur(6px) saturate(112%);
   -webkit-backdrop-filter: blur(6px) saturate(112%);
   padding: 0.62rem 0.68rem;
-  overflow: hidden;
   animation: meta-in 0.2s ease forwards;
 }
 .batch-reserve-meta[data-leaving="true"] {
@@ -1758,7 +1762,7 @@ body:has(.hud-page.theme-elite-red) {
   color: #0f56bf;
   font-size: var(--reserve-timer-size, 26px);
   font-weight: 800;
-  letter-spacing: 0.11em;
+  letter-spacing: 0;
   width: clamp(8ch, calc(var(--timer-scale-size, 26px) * 4.1), 12ch);
   min-width: clamp(8ch, calc(var(--timer-scale-size, 26px) * 4.1), 12ch);
   text-align: center;
@@ -1835,7 +1839,6 @@ body:has(.hud-page.theme-elite-red) {
 @media (orientation: landscape) and (min-width: 980px) {
   .batch-rail-list {
     min-width: 0;
-    padding-right: 0;
   }
 
   .batch-card {
@@ -1861,9 +1864,8 @@ body:has(.hud-page.theme-elite-red) {
   .batch-reserve-meta {
     min-height: var(--batch-unit-size, 156px);
     width: var(--batch-unit-size, 156px);
-    aspect-ratio: 1 / 1;
-    justify-items: center;
-    align-content: center;
+    align-items: center;
+    justify-content: center;
     gap: 0.42rem;
     padding: 0.62rem 0.54rem;
   }
@@ -2615,6 +2617,8 @@ body:has(.hud-page.theme-elite-red) {
   border-radius: 18px;
   min-height: 0;
   overflow: hidden;
+  box-sizing: border-box;
+  max-width: 100%;
 }
 
 .hud-form label {
@@ -2636,6 +2640,9 @@ body:has(.hud-page.theme-elite-red) {
   color: #111523;
   padding: 0.66rem 0.72rem;
   border-radius: 10px;
+  box-sizing: border-box;
+  max-width: 100%;
+  width: 100%;
 }
 
 .hud-form input:focus,
@@ -3870,7 +3877,6 @@ body:has(.hud-page.theme-elite-red) {
 
   .batch-rail-list {
     min-width: 0;
-    padding-right: 0;
   }
 
   .batch-card {

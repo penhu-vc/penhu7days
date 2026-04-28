@@ -120,13 +120,13 @@ const defaultTexts = {
   eta30: 'ETA 30 SEC',
   formLineLabel: 'line名稱 *',
   formLinePlaceholder: '請輸入 line名稱',
-  formLimeLabel: '您的LINE ID',
+  formLimeLabel: '您的LINE ID *',
   formLimePlaceholder: '請輸入您的LINE ID',
   formEmailLabel: 'Email *',
   formEmailPlaceholder: '請輸入 Email',
-  formPhoneLabel: '電話',
+  formPhoneLabel: '電話 *',
   formPhonePlaceholder: '請輸入電話',
-  formUidLabel: 'PENHU聯盟會員編號 *',
+  formUidLabel: 'PENHU聯盟會員短碼 *',
   formUidPlaceholder: '請輸入 PENHU聯盟會員編號',
   formKnowLabel: '你對於加密貨幣的了解程度 *',
   formBudgetLabel: '你願意在加密貨幣投入多少新台幣? *',
@@ -371,6 +371,7 @@ export default function PenhuLandingPage({ variant = 'starter' }: { variant?: La
   const [uidLookupError, setUidLookupError] = useState('');
   const [uidMemberId, setUidMemberId] = useState<number | null>(null);
   const [uidLookupDone, setUidLookupDone] = useState(false);
+  const [uidNotFound, setUidNotFound] = useState(false);
 
   useEffect(() => {
     // URL params prefill（外部網站跳轉）
@@ -381,13 +382,17 @@ export default function PenhuLandingPage({ variant = 'starter' }: { variant?: La
       line_id: p.get('lineId') ?? '',
       email: p.get('email') ?? '',
       phone: p.get('phone') ?? '',
-      okx_uid: p.get('uid') ?? '',
+      okx_uid: p.get('okxuid') ?? '',
       ref: p.get('ref') ?? '',
     };
     if (Object.values(vals).some(Boolean)) setPrefill(vals);
 
+    // URL 帶梯次 → 儲存等 batches 載入後自動選
+    const urlBatchNum = p.get('batch')?.trim();
+    if (urlBatchNum) urlBatchRef.current = `batch-${urlBatchNum}`;
+
     // 從 penhu 網站跳來（URL 有 uid）→ 自動查詢，不需要 OAuth
-    const urlUid = p.get('uid')?.trim();
+    const urlUid = p.get('okxuid')?.trim();
     if (urlUid) {
       setUidInput(urlUid);
       fetch(`/api/oauth/member-lookup?okxUid=${encodeURIComponent(urlUid)}`)
@@ -406,12 +411,13 @@ export default function PenhuLandingPage({ variant = 'starter' }: { variant?: La
               ...(str(m.email) ? { email: str(m.email) } : {}),
             }));
           } else {
-            // 找不到會員
-            setPrefill(prev => ({ ...prev }));
+            // 找不到會員 → 鎖在 UID 步驟
+            setUidNotFound(true);
+            setUidStepVisible(true);
           }
           setUidLookupDone(true);
         })
-        .catch(() => setUidLookupDone(true));
+        .catch(() => { setUidLookupDone(true); setUidNotFound(true); setUidStepVisible(true); });
       return; // 不走 OAuth
     }
 
@@ -437,6 +443,7 @@ export default function PenhuLandingPage({ variant = 'starter' }: { variant?: La
   const railSpacerRef = useRef<HTMLDivElement | null>(null);
   const skipCenterRef = useRef(false);
   const batchCheckIdRef = useRef(0);
+  const urlBatchRef = useRef<string | null>(null);
   const [signupAnchoredMarginTop, setSignupAnchoredMarginTop] = useState(-214);
   const [signupBatches, setSignupBatches] = useState(signupBatchesFallback);
 
@@ -508,7 +515,7 @@ export default function PenhuLandingPage({ variant = 'starter' }: { variant?: La
             if (!rail) return;
             const firstEnabled = rail.querySelector<HTMLButtonElement>('.batch-card.enabled');
             if (!firstEnabled) return;
-            centerRailOn(rail, () => elCenterInRail(rail, firstEnabled) - rail.clientWidth / 2, false);
+            centerRailOn(rail, () => elCenterInRail(rail, firstEnabled) - rail.clientWidth / 2, true);
           });
         });
       }, 280);
@@ -576,40 +583,80 @@ export default function PenhuLandingPage({ variant = 'starter' }: { variant?: La
     return (er.right - rr.left) + rail.scrollLeft;
   };
 
-  // Center the rail: reset state, compute target via lambda, then apply via paddingLeft (desktop)
-  // or scroll+spacer (mobile). Lambda runs after reset so BoundingClientRect is accurate.
+  // Center the rail on a target scroll position.
+  // Non-smooth: instant reset + apply (paddingLeft or scroll+spacer).
+  // Smooth: measure without touching DOM first, then apply spacer and animate —
+  //   avoids the instant jump that resetting scrollLeft/spacer causes before smooth scroll starts.
   const centerRailOn = (rail: HTMLDivElement, getTarget: () => number, smooth = false) => {
-    if (railSpacerRef.current) railSpacerRef.current.style.width = '0px';
-    rail.style.paddingLeft = '';
-    rail.scrollLeft = 0;
-    const target = getTarget();
-    if (target < 0) {
-      // Content doesn't fill the rail: push via paddingLeft
-      rail.style.paddingLeft = `${Math.ceil(-target)}px`;
-    } else if (target > 0) {
-      // Need to scroll right: ensure enough overflow via spacer
-      const railRect = rail.getBoundingClientRect();
-      const contentEls = Array.from(rail.querySelectorAll<HTMLElement>('.batch-card, .batch-reserve-meta'));
-      const naturalRight = contentEls.reduce((max, el) => {
-        const r = el.getBoundingClientRect();
-        return Math.max(max, (r.right - railRect.left) + rail.scrollLeft);
-      }, 0);
-      const spacerNeeded = Math.ceil(target + rail.clientWidth - naturalRight + 1);
-      if (railSpacerRef.current && spacerNeeded > 0) {
-        railSpacerRef.current.style.width = `${spacerNeeded}px`;
+    if (!smooth) {
+      // Instant path: reset state, measure natural layout, apply
+      if (railSpacerRef.current) railSpacerRef.current.style.width = '0px';
+      rail.style.paddingLeft = '';
+      rail.scrollLeft = 0;
+      const target = getTarget();
+      if (target < 0) {
+        rail.style.paddingLeft = `${Math.ceil(-target)}px`;
+      } else if (target > 0) {
+        const railRect = rail.getBoundingClientRect();
+        const contentEls = Array.from(rail.querySelectorAll<HTMLElement>('.batch-card, .batch-reserve-meta'));
+        const naturalRight = contentEls.reduce((max, el) => {
+          const r = el.getBoundingClientRect();
+          return Math.max(max, (r.right - railRect.left) + rail.scrollLeft);
+        }, 0);
+        const spacerNeeded = Math.ceil(target + rail.clientWidth - naturalRight + 1);
+        if (railSpacerRef.current && spacerNeeded > 0) {
+          railSpacerRef.current.style.width = `${spacerNeeded}px`;
+        }
+        rail.scrollLeft = target;
       }
-      if (smooth) rail.scrollTo({ left: target, behavior: 'smooth' });
-      else rail.scrollLeft = target;
+      return;
+    }
+
+    // Smooth path: measure first (no DOM changes), then set spacer and animate.
+    // This avoids scroll clamping or paddingLeft removal causing a visible jump
+    // before the smooth animation begins.
+    const currentPaddingLeft = parseFloat(rail.style.paddingLeft) || 0;
+    // getTarget() returns position in content-space (includes paddingLeft offset)
+    const rawTarget = getTarget();
+    // Convert to "natural" space (no paddingLeft): this is what we scroll to
+    const naturalTarget = rawTarget - currentPaddingLeft;
+
+    // Measure rightmost content edge in natural space (excluding spacer div)
+    const railRect = rail.getBoundingClientRect();
+    const contentEls = Array.from(rail.querySelectorAll<HTMLElement>('.batch-card, .batch-reserve-meta'));
+    const naturalRight = contentEls.reduce((max, el) => {
+      const r = el.getBoundingClientRect();
+      return Math.max(max, (r.right - railRect.left) + rail.scrollLeft);
+    }, 0) - currentPaddingLeft;
+
+    // Set spacer to support the scroll target (no intermediate reset — avoids clamping)
+    if (railSpacerRef.current) {
+      const spacerNeeded = Math.max(0, Math.ceil(naturalTarget + rail.clientWidth - naturalRight + 1));
+      railSpacerRef.current.style.width = spacerNeeded > 0 ? `${spacerNeeded}px` : '0px';
+    }
+
+    if (naturalTarget <= 0) {
+      // paddingLeft path: just apply directly (paddingLeft can't be smooth-animated)
+      rail.style.paddingLeft = `${Math.ceil(-naturalTarget)}px`;
+      if (rail.scrollLeft !== 0) rail.scrollLeft = 0;
+    } else {
+      // Scroll path: convert paddingLeft → scroll to keep visual position stable, then animate
+      rail.style.paddingLeft = '';
+      if (currentPaddingLeft > 0) {
+        rail.scrollLeft = currentPaddingLeft; // instant compensate: same visual, via scroll now
+      }
+      rail.scrollTo({ left: naturalTarget, behavior: 'smooth' });
     }
   };
 
-  // Mount: instant-center on first enabled batch
+  // Mount: instant-center on first enabled batch, or last batch if none enabled
   useEffect(() => {
     const rail = railListRef.current;
     if (!rail) return;
     const firstEnabled = rail.querySelector<HTMLButtonElement>('.batch-card.enabled');
-    if (!firstEnabled) return;
-    centerRailOn(rail, () => elCenterInRail(rail, firstEnabled) - rail.clientWidth / 2);
+    const target = firstEnabled ?? rail.querySelector<HTMLButtonElement>('.batch-card:last-of-type');
+    if (!target) return;
+    centerRailOn(rail, () => elCenterInRail(rail, target) - rail.clientWidth / 2);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Smooth-scroll on selection change
@@ -620,8 +667,9 @@ export default function PenhuLandingPage({ variant = 'starter' }: { variant?: La
       if (!selectedBatchId) {
         if (skipCenterRef.current) { skipCenterRef.current = false; return; }
         const firstEnabled = rail.querySelector<HTMLButtonElement>('.batch-card.enabled');
-        if (!firstEnabled) return;
-        centerRailOn(rail, () => elCenterInRail(rail, firstEnabled) - rail.clientWidth / 2, true);
+        const focusCard = firstEnabled ?? rail.querySelector<HTMLButtonElement>('.batch-card:last-of-type');
+        if (!focusCard) return;
+        centerRailOn(rail, () => elCenterInRail(rail, focusCard) - rail.clientWidth / 2, true);
       } else if (enrollReserved) {
         const selectedCard = rail.querySelector<HTMLButtonElement>('.batch-card.selected');
         const metaEl = rail.querySelector<HTMLDivElement>('.batch-reserve-meta');
@@ -963,10 +1011,46 @@ export default function PenhuLandingPage({ variant = 'starter' }: { variant?: La
     fetch(batchesUrl, { cache: 'no-store' })
       .then(r => r.ok ? r.json() : null)
       .then(data => {
-        if (data?.batches?.length) setSignupBatches(data.batches);
+        const batches = data?.batches?.length ? data.batches : signupBatchesFallback;
+        if (data?.batches?.length) setSignupBatches(batches);
+
+        // URL 帶梯次 → 自動選
+        const batchId = urlBatchRef.current;
+        if (!batchId) return;
+        const match = batches.find((b: { id: string }) => b.id === batchId);
+        if (!match) return;
+        urlBatchRef.current = null;
+        setSelectedBatchId(batchId);
+        sessionStorage.setItem('penhu_selected_batch', batchId);
+        setEnrollReserved(true);
+        setBatchCheckState('checking');
+        const checkId = ++batchCheckIdRef.current;
+        fetch('/api/check-batch-capacity', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ batchId }),
+          signal: AbortSignal.timeout(8000),
+        })
+          .then(r => r.json())
+          .then(cap => {
+            if (batchCheckIdRef.current !== checkId) return;
+            if (cap?.available === false) {
+              setBatchCheckState('full');
+            } else {
+              setBatchCheckState('available');
+              setReserveDeadlineMs(Date.now() + RESERVE_WINDOW_SECONDS * 1000);
+              setReserveSecondsLeft(RESERVE_WINDOW_SECONDS);
+            }
+          })
+          .catch(() => {
+            if (batchCheckIdRef.current !== checkId) return;
+            setBatchCheckState('available');
+            setReserveDeadlineMs(Date.now() + RESERVE_WINDOW_SECONDS * 1000);
+            setReserveSecondsLeft(RESERVE_WINDOW_SECONDS);
+          });
       })
       .catch(() => undefined);
-  }, [batchesUrl]);
+  }, [batchesUrl]); // eslint-disable-line react-hooks/exhaustive-deps
 
 
   const moduleLeavingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1063,9 +1147,11 @@ export default function PenhuLandingPage({ variant = 'starter' }: { variant?: La
       }
 
       if (!data.found || !data.member) {
-        setUidLookupError('查無此 OKX UID，請確認後再試，或點「略過」手動填寫');
+        setUidNotFound(true);
+        setUidLookupError('查無此 OKX UID');
         return;
       }
+      setUidNotFound(false);
 
       const m = data.member;
       const str = (v: unknown) => (typeof v === 'string' ? v : typeof v === 'number' ? String(v) : '');
@@ -1415,7 +1501,7 @@ export default function PenhuLandingPage({ variant = 'starter' }: { variant?: La
           <button
             className={`signup-unlock-overlay unified-lock-overlay ${signupUnlocking ? 'unlocking' : ''}`}
             onClick={() => {
-              if (uidLookupDone) {
+              if (uidLookupDone && !uidNotFound) {
                 triggerSignupUnlock();
               } else {
                 setUidStepVisible(true);
@@ -1424,53 +1510,72 @@ export default function PenhuLandingPage({ variant = 'starter' }: { variant?: La
             type="button"
           >
             <strong>輸入 OKX UID 開始報名</strong>
-            <span>{uidLookupDone ? '點擊繼續' : '點擊填入'}</span>
+            <span>{uidLookupDone && !uidNotFound ? '點擊繼續' : '點擊填入'}</span>
           </button>
         )}
 
         {!signupUnlocked && uidStepVisible && (
           <div className="signup-unlock-overlay unified-lock-overlay">
-            <strong style={{ fontSize: '1.05rem', letterSpacing: '0.03em' }}>輸入你的 OKX UID</strong>
-            <p style={{ color: 'var(--muted)', fontSize: '0.82rem', margin: 0, textAlign: 'center', maxWidth: 280 }}>
-              我們將從 PENHU 系統查詢你的資料，自動填入表單
-            </p>
-            <input
-              type="text"
-              value={uidInput}
-              onChange={e => { setUidInput(e.target.value); setUidLookupError(''); }}
-              placeholder="貼上你的 OKX UID"
-              style={{
-                width: '100%', maxWidth: 300, padding: '10px 14px',
-                background: 'rgba(255,255,255,0.6)', border: '1px solid rgba(66,146,255,0.4)',
-                borderRadius: 8, color: 'var(--ink)', fontSize: '0.95rem', outline: 'none',
-              }}
-              autoFocus
-              onKeyDown={e => { if (e.key === 'Enter') handleUidLookup(); }}
-            />
-            {uidLookupError && (
-              <p style={{ color: '#c0392b', fontSize: '0.82rem', margin: 0 }}>{uidLookupError}</p>
+            {uidNotFound ? (
+              /* ── 查無會員：叫他聯絡小幫手 ── */
+              <>
+                <strong style={{ fontSize: '1.05rem', letterSpacing: '0.03em', color: '#c0392b' }}>找不到你的 PENHU 會員資料</strong>
+                <p style={{ color: 'var(--muted)', fontSize: '0.85rem', margin: 0, textAlign: 'center', maxWidth: 300 }}>
+                  請先聯絡聯盟小幫手完成綁定後再報名。
+                </p>
+                <a
+                  href="https://lin.ee/UteSNuy"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn-primary"
+                  style={{ padding: '10px 28px', fontSize: '0.95rem', textDecoration: 'none', textAlign: 'center' }}
+                >
+                  聯絡聯盟小幫手 →
+                </a>
+                <span
+                  role="button"
+                  tabIndex={0}
+                  style={{ fontSize: '0.78rem', color: 'var(--muted)', cursor: 'pointer', textDecoration: 'underline' }}
+                  onClick={() => { setUidNotFound(false); setUidLookupError(''); setUidInput(''); }}
+                  onKeyDown={e => { if (e.key === 'Enter') { setUidNotFound(false); setUidLookupError(''); setUidInput(''); } }}
+                >
+                  重新輸入 OKX UID
+                </span>
+              </>
+            ) : (
+              /* ── 正常輸入 ── */
+              <>
+                <strong style={{ fontSize: '1.05rem', letterSpacing: '0.03em' }}>輸入你的 OKX UID</strong>
+                <p style={{ color: 'var(--muted)', fontSize: '0.82rem', margin: 0, textAlign: 'center', maxWidth: 280 }}>
+                  我們將從 PENHU 系統查詢你的資料，自動填入表單
+                </p>
+                <input
+                  type="text"
+                  value={uidInput}
+                  onChange={e => { setUidInput(e.target.value); setUidLookupError(''); }}
+                  placeholder="貼上你的 OKX UID"
+                  style={{
+                    width: '100%', maxWidth: 300, padding: '10px 14px',
+                    background: 'rgba(255,255,255,0.6)', border: '1px solid rgba(66,146,255,0.4)',
+                    borderRadius: 8, color: 'var(--ink)', fontSize: '0.95rem', outline: 'none',
+                  }}
+                  autoFocus
+                  onKeyDown={e => { if (e.key === 'Enter') handleUidLookup(); }}
+                />
+                {uidLookupError && (
+                  <p style={{ color: '#c0392b', fontSize: '0.82rem', margin: 0 }}>{uidLookupError}</p>
+                )}
+                <button
+                  type="button"
+                  onClick={handleUidLookup}
+                  disabled={uidLookupLoading || !uidInput.trim()}
+                  className="btn-primary"
+                  style={{ padding: '9px 24px', fontSize: '0.9rem', opacity: uidLookupLoading || !uidInput.trim() ? 0.5 : 1 }}
+                >
+                  {uidLookupLoading ? '查詢中…' : '查詢 →'}
+                </button>
+              </>
             )}
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button
-                type="button"
-                onClick={handleUidLookup}
-                disabled={uidLookupLoading || !uidInput.trim()}
-                className="btn-primary"
-                style={{ padding: '9px 24px', fontSize: '0.9rem', opacity: uidLookupLoading || !uidInput.trim() ? 0.5 : 1 }}
-              >
-                {uidLookupLoading ? '查詢中…' : '查詢 →'}
-              </button>
-              <span
-                role="button"
-                tabIndex={0}
-                onClick={() => { setUidStepVisible(false); triggerSignupUnlock(); }}
-                onKeyDown={e => { if (e.key === 'Enter') { setUidStepVisible(false); triggerSignupUnlock(); } }}
-                className="btn-code"
-                style={{ padding: '9px 16px', cursor: 'pointer', borderRadius: 8, fontSize: '0.85rem', display: 'inline-flex', alignItems: 'center' }}
-              >
-                略過
-              </span>
-            </div>
           </div>
         )}
         <header>
@@ -1525,8 +1630,8 @@ export default function PenhuLandingPage({ variant = 'starter' }: { variant?: La
 
           {/* UID 查詢狀態提示 */}
           {uidMemberId ? (
-            <div style={{ marginBottom: 16, padding: '10px 16px', background: 'rgba(249,115,22,0.1)', borderRadius: 10, border: '1px solid rgba(249,115,22,0.3)', display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ color: '#fb923c', fontSize: '0.88em' }}>✓ 已從 PENHU 系統帶入資料（OKX UID：{uidInput}）</span>
+            <div style={{ marginBottom: 16, padding: '10px 16px', background: 'rgba(74,158,255,0.08)', borderRadius: 10, border: '1px solid rgba(74,158,255,0.3)', display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ color: '#4a9eff', fontSize: '0.88em' }}>✓ 已驗證 PENHU 會員身份</span>
             </div>
           ) : null}
 
@@ -1564,17 +1669,31 @@ export default function PenhuLandingPage({ variant = 'starter' }: { variant?: La
               />
             </label>
             <label>
-              <span>{texts.formPhoneLabel}</span>
+              <span>
+                {texts.formPhoneLabel}
+                <span style={{ marginLeft: 8, color: '#e67e22', fontWeight: 500 }}>
+                  ⚠️ 後 6 位將作為登入密碼
+                </span>
+              </span>
               <input name="phone" type="tel" placeholder={texts.formPhonePlaceholder} defaultValue={prefill.phone} />
             </label>
             <label>
-              <span style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                {texts.formUidLabel}
-                <a href="https://lin.ee/UteSNuy" target="_blank" rel="noopener noreferrer" style={{ fontSize: '1em', color: '#4a9eff', textDecoration: 'none', whiteSpace: 'nowrap' }}>
-                  還沒「會員編號」點此領取
-                </a>
-              </span>
-              <input name="okx_uid" type="text" placeholder={texts.formUidPlaceholder} defaultValue={prefill.okx_uid} />
+              <span>{texts.formUidLabel}</span>
+              <input
+                name="okx_uid"
+                type="text"
+                placeholder={texts.formUidPlaceholder}
+                defaultValue={prefill.okx_uid}
+                readOnly={!!uidMemberId}
+                style={uidMemberId ? {
+                  background: 'rgba(74,158,255,0.06)',
+                  borderColor: 'rgba(74,158,255,0.35)',
+                  color: '#4a9eff',
+                  cursor: 'not-allowed',
+                  userSelect: 'none',
+                } : undefined}
+                title={uidMemberId ? '已從 PENHU 系統帶入，無法修改' : undefined}
+              />
             </label>
             <input
               name="website_url"

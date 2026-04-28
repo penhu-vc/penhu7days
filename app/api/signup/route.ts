@@ -161,8 +161,8 @@ function validatePayload(raw: unknown): { ok: true; data: SignupPayload } | { ok
   if (landingVariantRaw && landingVariantRaw !== 'default' && landingVariantRaw !== 'prov2') {
     return { ok: false, message: 'invalid landingVariant' };
   }
-  if (!lineName || lineName.length > 100) return { ok: false, message: 'invalid lineName' };
-  if (!lineId || lineId.length > 100) return { ok: false, message: 'invalid lineId' };
+  if (lineName.length > 100) return { ok: false, message: 'invalid lineName' };
+  if (lineId.length > 100) return { ok: false, message: 'invalid lineId' };
   if (!/^[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,253}\.[A-Za-z]{2,63}$/.test(email) || email.length > 320) {
     return { ok: false, message: 'invalid email' };
   }

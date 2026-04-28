@@ -27,9 +27,12 @@ export async function GET(request: NextRequest) {
     res.cookies.set(ADMIN_SESSION_COOKIE, adminToken, cookieOptions());
     return res;
   }
+  const authenticated = isAuthorizedAdminRequest(request);
   return NextResponse.json({
     ok: true,
-    authenticated: isAuthorizedAdminRequest(request),
+    authenticated,
+    // 已登入才把 token 給前端（方便 API 文件顯示）
+    token: authenticated ? getAdminToken() : null,
   });
 }
 

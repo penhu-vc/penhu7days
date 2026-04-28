@@ -1,0 +1,7 @@
+{
+  "batches": [
+    { "id": "batch-1", "label": "第一梯", "courseDate": "3/16 - 3/22", "endDateIso": "2026-03-15" },
+    { "id": "batch-2", "label": "第二梯", "courseDate": "3/30 - 4/5",  "endDateIso": "2026-03-29" },
+    { "id": "batch-3", "label": "第三梯", "courseDate": "4/13 - 4/19", "endDateIso": "2026-04-12" }
+  ]
+}

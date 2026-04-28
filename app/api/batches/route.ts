@@ -20,6 +20,10 @@ export type BatchPublic = {
   id: string;
   label: string;
   date: string;
+  courseStart: string | null;  // YYYY-MM-DD 開課日
+  courseEnd: string | null;    // YYYY-MM-DD 結課日
+  signupOpen: string | null;   // YYYY-MM-DD 開始報名日（null = 一直開放）
+  deadline: string;            // YYYY-MM-DD 截止報名日
   enabled: boolean;
   status: string;
   forceShow?: boolean;
@@ -56,6 +60,17 @@ const DEFAULT_CONFIGS: Record<Variant, BatchConfig> = {
     ],
   },
 };
+
+/** 解析 "M/D - M/D" 格式，用 endDateIso 的年份補全 */
+function parseCourseDate(courseDate: string, refYear: number): { start: string; end: string } | null {
+  const m = courseDate.match(/(\d{1,2})\/(\d{1,2})\s*-\s*(\d{1,2})\/(\d{1,2})/);
+  if (!m) return null;
+  const pad = (n: string) => n.padStart(2, '0');
+  return {
+    start: `${refYear}-${pad(m[1])}-${pad(m[2])}`,
+    end:   `${refYear}-${pad(m[3])}-${pad(m[4])}`,
+  };
+}
 
 function resolveVariant(req: NextRequest): Variant {
   return req.nextUrl.searchParams.get('variant') === 'prov2' ? 'prov2' : 'starter';
@@ -106,10 +121,27 @@ function computeBatches(config: BatchConfig, adminMode: boolean): BatchPublic[] 
         return today >= prevGrey;
       })();
 
+      const refYear = parseInt(def.endDateIso.slice(0, 4), 10);
+      const parsed = parseCourseDate(def.courseDate, refYear);
+
+      // 開始報名日：第一梯無限制（null），後續梯次從前一梯 endDate - BATCH_GREY_DAYS 開放
+      const idx = batches.indexOf(def);
+      let signupOpen: string | null = null;
+      if (idx > 0) {
+        const prev = batches[idx - 1];
+        const prevEnd = new Date(prev.endDateIso);
+        prevEnd.setDate(prevEnd.getDate() - BATCH_GREY_DAYS);
+        signupOpen = prevEnd.toISOString().slice(0, 10);
+      }
+
       const base: BatchPublic = {
         id: def.id,
         label: def.label,
         date: def.courseDate,
+        courseStart: parsed?.start ?? null,
+        courseEnd:   parsed?.end   ?? null,
+        signupOpen,
+        deadline: def.endDateIso,
         enabled: !greyed && !expired,
         status: expired ? '已結束' : greyed ? '報名截止' : '已開放',
         forceShow: def.forceShow,
@@ -148,10 +180,23 @@ export async function GET(request: NextRequest) {
         prevGrey.setDate(prevGrey.getDate() - BATCH_GREY_DAYS);
         return today >= prevGrey;
       })();
+      const refYear = parseInt(def.endDateIso.slice(0, 4), 10);
+      const parsed = parseCourseDate(def.courseDate, refYear);
+      let signupOpen: string | null = null;
+      if (index > 0) {
+        const prev = config.batches[index - 1];
+        const prevEnd = new Date(prev.endDateIso);
+        prevEnd.setDate(prevEnd.getDate() - BATCH_GREY_DAYS);
+        signupOpen = prevEnd.toISOString().slice(0, 10);
+      }
       return {
         id: def.id,
         label: def.label,
         date: def.courseDate,
+        courseStart: parsed?.start ?? null,
+        courseEnd:   parsed?.end   ?? null,
+        signupOpen,
+        deadline: def.endDateIso,
         endDateIso: def.endDateIso,
         enabled: !greyed && !expired,
         status: expired ? '已結束' : greyed ? '報名截止' : '已開放',

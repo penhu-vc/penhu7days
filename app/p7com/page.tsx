@@ -474,75 +474,135 @@ const API_ENDPOINTS = [
     response: `{\n  "ok": true,\n  "variant": "prov2",\n  "total": 3,\n  "data": [...]\n}`,
   },
   {
-    id: 'batches',
-    label: '梯次管理資料',
+    id: 'batches-public',
+    label: '梯次列表（公開）',
+    method: 'GET',
+    path: '/api/batches',
+    desc: '公開梯次資料，不需認證。含完整日期：開課日、結課日、開始報名日、截止報名日。',
+    params: [{ name: 'variant', values: 'starter（預設）| prov2', note: '指定課程類型' }],
+    example: `curl "${SITE}/api/batches?variant=starter"`,
+    response: `{\n  "batches": [\n    {\n      "id": "batch-3",\n      "label": "第三梯",\n      "date": "4/6 - 4/12",\n      "courseStart": "2026-04-06",\n      "courseEnd":   "2026-04-12",\n      "signupOpen":  "2026-03-20",\n      "deadline":    "2026-04-05",\n      "enabled": true,\n      "status": "已開放"\n    }\n  ]\n}`,
+  },
+  {
+    id: 'batches-admin',
+    label: '梯次原始設定（管理用）',
     method: 'GET',
     path: '/api/v1/batches',
-    desc: '回傳新手班與實戰班的梯次設定（id、日期、截止日）。',
+    desc: '回傳新手班與實戰班的梯次原始設定，需要 Admin Token。',
     params: [],
     example: `curl "${SITE}/api/v1/batches" \\\n  -H "x-api-key: YOUR_ADMIN_TOKEN"`,
-    response: `{\n  "ok": true,\n  "starter": { "batches": [...] },\n  "prov2":   { "batches": [...] }\n}`,
+    response: `{\n  "ok": true,\n  "starter": {\n    "batches": [\n      { "id": "batch-3", "label": "第三梯", "courseDate": "4/6 - 4/12", "endDateIso": "2026-04-05" }\n    ]\n  },\n  "prov2": {\n    "batches": [\n      { "id": "batch-3", "label": "第三梯", "courseDate": "4/13 - 4/19", "endDateIso": "2026-04-12" }\n    ]\n  }\n}`,
   },
 ];
 
+/** 通用複製，回傳 true = 成功 */
+function universalCopy(text: string): boolean {
+  // 先試 execCommand（不需要 permission，iframe 也可用）
+  try {
+    const el = document.createElement('textarea');
+    el.value = text;
+    el.style.cssText = 'position:fixed;left:-9999px;top:-9999px;opacity:0';
+    document.body.appendChild(el);
+    el.focus();
+    el.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(el);
+    if (ok) return true;
+  } catch { /* fallthrough */ }
+  return false;
+}
+
+/** 彈出框顯示可手動複製的文字 */
+function showCopyModal(text: string) {
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9999;display:flex;align-items:center;justify-content:center';
+  const box = document.createElement('div');
+  box.style.cssText = 'background:#1a1a2e;border:1px solid #7c3aed;border-radius:12px;padding:20px;max-width:90vw;max-height:70vh;display:flex;flex-direction:column;gap:10px';
+  const title = document.createElement('p');
+  title.textContent = '自動複製失敗，請手動全選後複製（Ctrl+A → Ctrl+C）';
+  title.style.cssText = 'color:#f87171;margin:0;font-size:0.85rem';
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.cssText = 'width:60vw;height:50vh;background:#0d0d1a;color:#86efac;border:1px solid #3b3b5c;border-radius:6px;padding:10px;font-size:0.75rem;resize:none';
+  ta.readOnly = true;
+  const closeBtn = document.createElement('button');
+  closeBtn.textContent = '✕ 關閉';
+  closeBtn.style.cssText = 'align-self:flex-end;padding:6px 16px;background:#7c3aed;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:0.82rem';
+  closeBtn.onclick = () => document.body.removeChild(overlay);
+  overlay.onclick = (e) => { if (e.target === overlay) document.body.removeChild(overlay); };
+  box.append(title, ta, closeBtn);
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+  ta.focus();
+  ta.select();
+}
+
 function CopyBtn({ text }: { text: string }) {
-  const [copied, setCopied] = React.useState(false);
+  const [state, setState] = React.useState<'idle'|'ok'|'fail'>('idle');
   return (
     <button
-      onClick={() => {
-        const doCopy = async () => {
-          if (navigator.clipboard && window.isSecureContext) {
+      onClick={async () => {
+        let ok = universalCopy(text);
+        if (!ok) {
+          try {
             await navigator.clipboard.writeText(text);
-          } else {
-            const el = document.createElement('textarea');
-            el.value = text;
-            el.style.cssText = 'position:fixed;opacity:0;pointer-events:none';
-            document.body.appendChild(el);
-            el.focus(); el.select();
-            document.execCommand('copy');
-            document.body.removeChild(el);
-          }
-          setCopied(true);
-          setTimeout(() => setCopied(false), 1500);
-        };
-        doCopy().catch(() => {});
+            ok = true;
+          } catch { /* fail */ }
+        }
+        if (ok) {
+          setState('ok');
+          setTimeout(() => setState('idle'), 1500);
+        } else {
+          showCopyModal(text);
+          setState('fail');
+          setTimeout(() => setState('idle'), 2000);
+        }
       }}
       style={{
         position: 'absolute', top: 8, right: 8,
         padding: '3px 10px', fontSize: '0.72rem',
-        background: copied ? '#16a34a' : '#3b3b5c',
+        background: state === 'ok' ? '#16a34a' : state === 'fail' ? '#dc2626' : '#3b3b5c',
         color: '#fff', border: 'none', borderRadius: 5, cursor: 'pointer',
         transition: 'background 0.2s',
       }}
     >
-      {copied ? '✓ 已複製' : '複製'}
+      {state === 'ok' ? '✓ 已複製' : state === 'fail' ? '手動複製↑' : '複製'}
     </button>
   );
 }
 
 function ApiDocsPanel() {
-  const [copiedAll, setCopiedAll] = React.useState(false);
+  const [copiedAll, setCopiedAll] = React.useState<'idle'|'ok'|'fail'>('idle');
+  const [token, setToken] = React.useState<string>('');
+  const [tokenVisible, setTokenVisible] = React.useState(false);
+  const [tokenCopied, setTokenCopied] = React.useState(false);
 
-  function copyAll() {
+  React.useEffect(() => {
+    fetch('/api/auth/session')
+      .then(r => r.json())
+      .then((d: { token?: string }) => { if (d.token) setToken(d.token); })
+      .catch(() => {});
+  }, []);
+
+  function resolveExample(example: string) {
+    return token ? example.replace(/YOUR_ADMIN_TOKEN/g, token) : example;
+  }
+
+  async function copyAll() {
     const text = API_ENDPOINTS.map(ep =>
-      `## ${ep.label}\n${ep.method} ${SITE}${ep.path}\n\n範例:\n${ep.example}\n\n回傳:\n${ep.response}`
+      `## ${ep.label}\n${ep.method} ${SITE}${ep.path}\n\n範例:\n${resolveExample(ep.example)}\n\n回傳:\n${ep.response}`
     ).join('\n\n---\n\n');
-    const doCopy = async () => {
-      if (navigator.clipboard && window.isSecureContext) {
-        await navigator.clipboard.writeText(text);
-      } else {
-        const el = document.createElement('textarea');
-        el.value = text;
-        el.style.cssText = 'position:fixed;opacity:0;pointer-events:none';
-        document.body.appendChild(el);
-        el.focus(); el.select();
-        document.execCommand('copy');
-        document.body.removeChild(el);
-      }
-      setCopiedAll(true);
-      setTimeout(() => setCopiedAll(false), 1800);
-    };
-    doCopy().catch(() => {});
+    let ok = universalCopy(text);
+    if (!ok) {
+      try { await navigator.clipboard.writeText(text); ok = true; } catch { /* fail */ }
+    }
+    if (ok) {
+      setCopiedAll('ok');
+    } else {
+      showCopyModal(text);
+      setCopiedAll('fail');
+    }
+    setTimeout(() => setCopiedAll('idle'), 1800);
   }
 
   return (
@@ -556,17 +616,46 @@ function ApiDocsPanel() {
           onClick={copyAll}
           style={{
             padding: '6px 16px', fontSize: '0.82rem',
-            background: copiedAll ? '#16a34a' : '#7c3aed',
+            background: copiedAll === 'ok' ? '#16a34a' : copiedAll === 'fail' ? '#dc2626' : '#7c3aed',
             color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer',
             fontWeight: 600, whiteSpace: 'nowrap', transition: 'background 0.2s',
           }}
         >
-          {copiedAll ? '✓ 已複製全部' : '📋 一鍵複製全部'}
+          {copiedAll === 'ok' ? '✓ 已複製全部' : copiedAll === 'fail' ? '❌ 複製失敗，請手動複製' : '📋 一鍵複製全部'}
         </button>
       </div>
 
+      {/* Token 顯示區 */}
       <div style={{ background: '#1a1a2e', border: '1px solid #2a2a4a', borderRadius: 10, padding: '14px 18px', marginBottom: 28 }}>
-        <div style={{ fontSize: '0.8rem', color: '#888', marginBottom: 6 }}>🔑 ADMIN_TOKEN 就是後台登入密碼（或後台設定頁面複製）</div>
+        <div style={{ fontSize: '0.78rem', color: '#888', marginBottom: 8 }}>🔑 你的 ADMIN_TOKEN</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <code style={{
+            flex: 1, background: '#0d0d1a', border: '1px solid #3b3b5c', borderRadius: 6,
+            padding: '7px 12px', fontSize: '0.82rem', color: '#a78bfa',
+            letterSpacing: tokenVisible ? '0.02em' : '0.15em',
+            filter: tokenVisible ? 'none' : 'blur(4px)',
+            transition: 'filter 0.2s', userSelect: tokenVisible ? 'text' : 'none',
+            minHeight: 32, display: 'flex', alignItems: 'center',
+          }}>
+            {token || '載入中…'}
+          </code>
+          <button
+            onClick={() => setTokenVisible(v => !v)}
+            style={{ padding: '6px 12px', background: '#2a2a4a', border: '1px solid #3b3b5c', borderRadius: 6, color: '#ccc', cursor: 'pointer', fontSize: '0.8rem', whiteSpace: 'nowrap' }}
+          >
+            {tokenVisible ? '🙈 隱藏' : '👁 顯示'}
+          </button>
+          <button
+            onClick={async () => {
+              let ok = universalCopy(token);
+              if (!ok) { try { await navigator.clipboard.writeText(token); ok = true; } catch { /* */ } }
+              if (ok) { setTokenCopied(true); setTimeout(() => setTokenCopied(false), 1500); }
+            }}
+            style={{ padding: '6px 12px', background: tokenCopied ? '#16a34a' : '#7c3aed', border: 'none', borderRadius: 6, color: '#fff', cursor: 'pointer', fontSize: '0.8rem', whiteSpace: 'nowrap', transition: 'background 0.2s' }}
+          >
+            {tokenCopied ? '✓ 已複製' : '複製 Token'}
+          </button>
+        </div>
       </div>
 
       {API_ENDPOINTS.map((ep) => (
@@ -597,9 +686,9 @@ function ApiDocsPanel() {
             <div style={{ fontSize: '0.75rem', color: '#666', marginBottom: 4 }}>範例指令</div>
             <div style={{ position: 'relative', marginBottom: 12 }}>
               <pre style={{ background: '#0d0d1a', borderRadius: 8, padding: '10px 12px', fontSize: '0.78rem', color: '#e2e0f0', margin: 0, overflowX: 'auto', paddingRight: 70 }}>
-                {ep.example}
+                {resolveExample(ep.example)}
               </pre>
-              <CopyBtn text={ep.example} />
+              <CopyBtn text={resolveExample(ep.example)} />
             </div>
 
             <div style={{ fontSize: '0.75rem', color: '#666', marginBottom: 4 }}>回傳格式</div>

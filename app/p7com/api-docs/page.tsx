@@ -68,11 +68,35 @@ const endpoints = [
 }`,
   },
   {
+    id: 'batches-public',
+    label: '梯次列表（公開）',
+    method: 'GET',
+    path: '/api/batches',
+    desc: '公開梯次資料，不需認證。回傳各梯次的完整日期資訊（開課、結課、開始報名、截止報名）。',
+    params: [{ name: 'variant', values: 'starter（預設）| prov2', note: '指定課程類型' }],
+    example: `curl "${SITE}/api/batches?variant=starter"`,
+    response: `{
+  "batches": [
+    {
+      "id": "batch-3",
+      "label": "第三梯",
+      "date": "4/6 - 4/12",
+      "courseStart": "2026-04-06",   // 開課日
+      "courseEnd":   "2026-04-12",   // 結課日
+      "signupOpen":  "2026-03-20",   // 開始報名日（null = 一直開放）
+      "deadline":    "2026-04-05",   // 截止報名日
+      "enabled": true,               // false = 已截止或已結束
+      "status": "已開放"             // "已開放" | "報名截止" | "已結束"
+    }
+  ]
+}`,
+  },
+  {
     id: 'batches',
-    label: '梯次管理資料',
+    label: '梯次原始設定（管理用）',
     method: 'GET',
     path: '/api/v1/batches',
-    desc: '回傳新手班與實戰班的梯次設定（id、日期、截止日）。',
+    desc: '回傳新手班與實戰班的梯次原始設定（含 endDateIso）。需要 Admin Token。',
     params: [],
     example: `curl "${SITE}/api/v1/batches" \\
   -H "x-api-key: YOUR_ADMIN_TOKEN"`,
@@ -80,13 +104,16 @@ const endpoints = [
   "ok": true,
   "starter": {
     "batches": [
-      { "id": "batch-1", "label": "第一梯", "courseDate": "03/09 - 03/15", "endDateIso": "2026-03-08" },
-      { "id": "batch-3", "label": "第三梯", "courseDate": "04/06 - 04/12", "endDateIso": "2026-04-05" }
+      { "id": "batch-1", "label": "第一梯", "courseDate": "3/9 - 3/15",  "endDateIso": "2026-03-08" },
+      { "id": "batch-2", "label": "第二梯", "courseDate": "3/23 - 3/29", "endDateIso": "2026-03-22" },
+      { "id": "batch-3", "label": "第三梯", "courseDate": "4/6 - 4/12",  "endDateIso": "2026-04-05" }
     ]
   },
   "prov2": {
     "batches": [
-      { "id": "batch-2", "label": "第二梯", "courseDate": "3/30 - 4/5", "endDateIso": "2026-03-29" }
+      { "id": "batch-1", "label": "第一梯", "courseDate": "3/16 - 3/22", "endDateIso": "2026-03-15" },
+      { "id": "batch-2", "label": "第二梯", "courseDate": "3/30 - 4/5",  "endDateIso": "2026-03-29" },
+      { "id": "batch-3", "label": "第三梯", "courseDate": "4/13 - 4/19", "endDateIso": "2026-04-12" }
     ]
   }
 }`,
