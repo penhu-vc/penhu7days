@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 export const ADMIN_SESSION_COOKIE = 'penhu_admin_session';
-export const ADMIN_ALLOWED_ROLES = ['admin', 'analyst'];
+export const ADMIN_ALLOWED_ROLES = ['admin', 'analyst', 'teacher'];
 
 export type AdminSession = {
   id: number;
@@ -9,6 +9,10 @@ export type AdminSession = {
   shortCode: string;
   role: string;
 };
+
+export function getAdminToken(): string | undefined {
+  return process.env.ADMIN_TOKEN;
+}
 
 export function parseAdminSession(value: string | undefined): AdminSession | null {
   if (!value) return null;
